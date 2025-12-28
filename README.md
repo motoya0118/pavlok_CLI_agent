@@ -78,3 +78,10 @@ echo 'PAVLOK_API_KEY=YOUR_API_KEY' > .env
 ```bash
 uv sync
 ```
+
+### 7. コマンド実行例
+刺激の種類と値を指定してAPIへリクエストできます（値は1〜100の範囲に限定されています）。
+
+```bash
+uv run main.py beep 100
+```

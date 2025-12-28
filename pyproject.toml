@@ -9,6 +9,10 @@ dependencies = [
   "requests>=2.32.5",
 ]
 
+[tool.hatch.build.targets.wheel]
+# Include the top-level script so editable builds succeed even without a package directory.
+include = ["main.py"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
