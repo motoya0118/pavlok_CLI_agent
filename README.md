@@ -10,7 +10,7 @@
 ⚠️`pavlok`端末を所有していることが前提になります⚠️
 
 本レポジトリをローカルにcloneして環境構築(`uv sync`)し、
-本レポジトリソースをカレントディレクトリにし`CLI Agent`,`IDE Agent`を起動すれば即機能します。
+本レポジトリソースをカレントディレクトリにし`uv run python main.py`を起動すれば即機能します。
 
 ### 動作イメージ
 ![alt text](./documents/images/README/image5.png)
@@ -39,21 +39,21 @@
   - CLI Agent
     - codex CLI: ⭕️動作確認済
     - claude code: ❌動作未確認
-    - gemini CLI: ❌動作未確認
+    - gemini CLI: ⭕️動作確認済 (AGENTS.md -> GEMINI.mdへリネーム必須)
   - IDE Agent
     - VS code拡張機能
       - Codex – OpenAI’s coding agent: ⭕️動作確認済
-      - Gemini Code Assist: ❌動作未確認
     - Cursor: ❌動作未確認
 
 ## 導入
-### 1. pavlok本体を購入します
+### pavlok
+#### 1. pavlok本体を購入します
 - [日本代理店](https://www.pavlok-japan-official.com/top)
 - [本社](https://www.pavlok.com/)
 
-### 2. `pavlokアカウント新規作成` & `pavlok本体とアカウント紐付け`を行います
+#### 2. `pavlokアカウント新規作成` & `pavlok本体とアカウント紐付け`を行います
    - [解説動画](https://video.wixstatic.com/video/3cbb88_fafe1dda81a346d48023698dbda68355/1080p/mp4/file.mp4)
-### 3. pavlok公式サーバーから`API_KEY`を取得します
+#### 3. pavlok公式サーバーから`API_KEY`を取得します
 1. [pavlok公式_APIDOC](https://pavlok.readme.io/reference/intro/authentication)にアクセスします
 2. `Log in to see your API keys`をクリックします
    ![alt text](./documents/images/README/image1.png)
@@ -63,25 +63,30 @@
  ![alt text](./documents/images/README/image3.png)
 5. Authページに`API_KEY`が表示されているのでコピーします **prefixの`Bearer `を除いたものが`PAVLOK_API_KEY`です**
    ![alt text](./documents/images/README/image4.png)
-### 4. レポジトリのクローン
+
+### slack
+#### APIキー取得 & slack設定
+[こちら](https://zenn.dev/kou_pg_0131/articles/slack-api-post-message)の手順の
+`アプリを作成する` ~ `アプリをチャンネルに追加する`までを実施します。
+
+`スコープを設定する`項はBOTUSERに以下の権限を付与してください
+![alt text](./documents/images/README/image6.png)
+
+### プロジェクト側設定
+#### 1. レポジトリのクローン
 ```bash
 cd {your dir}
 git clone https://github.com/motoya0118/pavlok_CLI_agent.git
 ```
-### 5. .envの設定
-`YOUR_API_KEY`部を取得した自身の`PAVLOK_API_KEY`に置き換えて、以下のコマンドを実行します
-```bash
-echo 'PAVLOK_API_KEY=YOUR_API_KEY' > .env
-```
+#### 2. .envの設定
+`sample-env`を参照し、`.env`を作成します
 
-### 6. 仮装環境構築 & インストール
+#### 3. 仮装環境構築 & インストール
 ```bash
 uv sync
 ```
 
-### 7. コマンド実行例
-刺激の種類と値を指定してAPIへリクエストできます（値は1〜100の範囲に限定されています）。
-
+### 実行方法
 ```bash
-uv run main.py beep 100
+uv run python main.py
 ```
