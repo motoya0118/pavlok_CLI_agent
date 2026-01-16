@@ -1,1 +1,26 @@
-PAVLOK_API_KEY={YOUR_API_KEY}
+# ===== 認証情報 =====
+PAVLOK_API_KEY={YOUR_API_KEY} # Pavlok APIキー
+SLACK_BOT_USER_OAUTH_TOKEN={YOUR_API_KEY} # Slack Bot User OAuth Token
+SLACK_USER_OAUTH_TOKEN={YOUR_API_KEY} # Slack User OAuth Token（ユーザー権限が必要な操作用）
+
+# ===== Slack 設定 =====
+SLACK_CHANNEL={CHANNEL} # 通知を送るSlackチャンネル名またはID
+
+# ===== 時刻・タイムアウト設定 =====
+TIMEZONE=JST # タイムゾーン（例: JST）
+REMIND_TIMEOUT_SEC=300 # リマインド処理のタイムアウト（秒）
+REFLECTION_TIMEOUT_SEC=600 # 振り返り処理のタイムアウト（秒）
+RETRY_DELAY_MIN=5 # リトライの待機時間（分）
+PUNISH_INTERVAL_SEC=1 # 罰の実行間隔（秒）
+
+# ===== Pavlok リマインド設定 =====
+PAVLOK_TYPE_REMIND=beep # リマインド時のPavlokモード（beep/vibe/zap など）
+PAVLOK_VALUE_REMIND=1 # リマインド時のPavlok強度
+
+# ===== Pavlok 罰設定 =====
+PAVLOK_TYPE_PUNISH=zap # 罰のPavlokモード（beep/vibe/zap など）
+PAVLOK_VALUE_PUNISH=50 # 罰のPavlok強度
+
+# ===== 安全上限・制限 =====
+LIMIT_DAY_PAVLOK_COUNTS=10 # 1日に実行できるPavlok回数の上限
+LIMIT_PAVLOK_ZAP_VALUE=100 # zap強度の上限
