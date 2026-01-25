@@ -8,7 +8,7 @@
     - どういう計画で登録したかslackに返信する(Template項の`確定`をベースにメッセージを構成すること)
   - 返信が返ってこなかった場合:
     - `scripts/add_slack_ignore_events.py`で登録する
-    - 15分後に再度`morning`を実施するように`scripts/add_schedules.py`へ登録する
+    - 15分後に再度`morning`を同様のinput_valueで実施するように`scripts/add_schedules.py`へ登録する
 - 必要なら`behavior_logs`にログを残すため`--mode write`で`behavior_log`を呼ぶ
 - pavlok端末に`vibe`を送る
 

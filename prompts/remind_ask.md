@@ -6,7 +6,7 @@
     - 返信内容を解析し、必要なら`pavlok`刺激を実行し`behavior_logs`に記録する(強度は`behavior_log`に応じて判断してください)
   - 返信がない場合
     - `add_slack_ignore_events`を実行して無視を記録する
-    - 15分後に再度`reflection`を実施するように`scripts/add_schedules.py`へ登録する
+    - 15分後に再度`remind_ask`を同様のinput_valueで実施するように`scripts/add_schedules.py`へ登録する
 - slackに`対象者のコーチとして適切な内容`を返信する
 - pavlok端末に`vibe`を送る
 
