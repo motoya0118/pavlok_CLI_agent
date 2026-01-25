@@ -10,7 +10,7 @@ Use `scripts/add_schedules.py` to insert multiple records into `schedules`.
 ## Run
 
 ```bash
-uv run scripts/add_schedules.py '[{"script_name":"pavlok","input_value":"zap 30","scheduled_date":"2026-01-10 09:30"}]'
+uv run scripts/add_schedules.py '[{"prompt_name":"pavlok","input_value":"zap 30","scheduled_date":"2026-01-10 09:30"}]'
 ```
 
 ```bash
@@ -21,7 +21,7 @@ cat schedules.json | uv run scripts/add_schedules.py -
 
 Each record must be an object with:
 
-- `script_name` (string)
+- `prompt_name` (string)
 - `input_value` (string)
 - `scheduled_date` as `YYYYMMDD`, `YYYYMMDDhhmm`, `YYYY-MM-DD`, or `YYYY-MM-DD hh:mm` (minute precision)
 

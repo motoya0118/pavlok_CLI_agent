@@ -3,6 +3,9 @@ PAVLOK_API_KEY={YOUR_API_KEY} # Pavlok APIキー
 SLACK_BOT_USER_OAUTH_TOKEN={YOUR_API_KEY} # Slack Bot User OAuth Token
 SLACK_USER_OAUTH_TOKEN={YOUR_API_KEY} # Slack User OAuth Token（ユーザー権限が必要な操作用）
 
+# ===== Agentモード設定 =====
+AGENT_MODE=codex_cli # [codex_cli or gemini_cli]
+
 # ===== Slack 設定 =====
 SLACK_CHANNEL={CHANNEL} # 通知を送るSlackチャンネル名またはID
 

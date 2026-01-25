@@ -21,7 +21,7 @@ class ScheduleExecutor:
         do_migrations: bool = False,
     ) -> None:
         self.prompt_dir = prompt_dir or (Path(__file__).resolve().parent / "prompts")
-        self.runner = runner or self.run_codex
+        self.runner = runner or self.run_agent
         self.now_func = now_func
         self.do_migrations = do_migrations
 
@@ -63,20 +63,25 @@ class ScheduleExecutor:
         }
         return self.render_prompt(template, context)
 
-    def run_codex(self, prompt: str) -> subprocess.CompletedProcess:
-        cmd = ["codex", "exec", prompt]
-        self.log(f"codex exec: {self.format_command(cmd)}")
+    def run_agent(self, prompt: str) -> subprocess.CompletedProcess:
+        mode = os.getenv("AGENT_MODE")
+        if mode == "codex_cli":
+            cmd = ["codex", "exec", prompt]
+        elif mode == "gemini_cli":
+            cmd = ["gemini", "-y", prompt]
+        else:
+            raise ValueError("AGENT_MODE must be 'codex_cli' or 'gemini_cli'.")
+
+        self.log(f"{self.format_command(cmd)}")
         return subprocess.run(cmd, text=True, check=False)
 
     @staticmethod
     def format_command(cmd: list[str], max_prompt: int = 200) -> str:
-        if len(cmd) >= 3 and cmd[0] == "codex" and cmd[1] == "exec":
-            prompt = cmd[2].replace("\n", " ").strip()
-            if len(prompt) > max_prompt:
-                prompt = f"{prompt[:max_prompt]}...({len(prompt)} chars)"
-            safe_cmd = [cmd[0], cmd[1], prompt]
-            return " ".join(shlex.quote(part) for part in safe_cmd)
-        return " ".join(shlex.quote(part) for part in cmd)
+        prompt = cmd[2].replace("\n", " ").strip()
+        if len(prompt) > max_prompt:
+            prompt = f"{prompt[:max_prompt]}...({len(prompt)} chars)"
+        safe_cmd = [cmd[0], cmd[1], prompt]
+        return " ".join(shlex.quote(part) for part in safe_cmd)
 
     @staticmethod
     def log(message: str) -> None:
