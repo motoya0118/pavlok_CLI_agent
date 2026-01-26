@@ -1,6 +1,6 @@
 ---
 name: add-schedules
-description: Insert schedule rows into the local database (schedules) from a JSON array. Use when bulk-loading schedule entries with script_name, input_value, and scheduled_date via scripts/add_schedules.py.
+description: Insert schedule rows into the local database (schedules) from a JSON array. Use when bulk-loading schedule entries with prompt_name, input_value, and scheduled_date via scripts/add_schedules.py.
 ---
 
 # Add Schedules
@@ -23,9 +23,17 @@ Each record must be an object with:
 
 - `prompt_name` (string)
 - `input_value` (string)
-- `scheduled_date` as `YYYYMMDD`, `YYYYMMDDhhmm`, `YYYY-MM-DD`, or `YYYY-MM-DD hh:mm` (minute precision)
+- `scheduled_date` as `YYYYMMDD`, `YYYYMMDDhhmm`, `YYYY-MM-DD`, `YYYY-MM-DD hh:mm`, or `YYYY-MM-DDTHH:MM` (minute precision). Integers are accepted for the numeric formats.
 
-`id` and `is_execute` are ignored if present. Any other extra fields cause an error.
+`id` and `state` are ignored if present. Any other extra fields cause an error.
+
+## Outputs
+
+Prints a single line of JSON:
+
+```
+{"inserted": 2}
+```
 
 ## Notes
 

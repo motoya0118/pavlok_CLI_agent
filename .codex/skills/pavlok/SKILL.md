@@ -22,4 +22,4 @@ uv run scripts/pavlok.py zap 30 "reason for trigger"
 ## Notes
 
 - Requires `PAVLOK_API_KEY` in `.env` or the environment.
-- `scripts/pavlok.py` currently defines `call(stimulus_type, stimulus_value, reason)` but calls it with only two args. If you hit a `TypeError`, update the call site or function signature before running.
+- For `zap`, `LIMIT_DAY_PAVLOK_COUNTS` and `LIMIT_PAVLOK_ZAP_VALUE` are required. If the daily zap limit is exceeded, the script returns a JSON object with `skipped: true` and `reason: "limit_reached"`. If the value is above the limit, it is clamped to `LIMIT_PAVLOK_ZAP_VALUE`.

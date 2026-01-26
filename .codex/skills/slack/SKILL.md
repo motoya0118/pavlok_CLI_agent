@@ -36,15 +36,15 @@ uv run scripts/slack.py --mode reply --thread-ts 1700000000.000000 "Reply text"
 Ask mode prints a single line:
 
 ```
-{assistant_question: ..., user_answer: ..., is_answer: true|false}
+{assistant_question: ..., user_answer: ..., is_answer: true|false, thread_ts: ..., message_ts: ...}
 ```
 
-If no reply arrives before timeout, `user_answer` is empty and `is_answer` is `false`.
+If no reply arrives before timeout, `user_answer` is `null` and `is_answer` is `false`.
 
 Reply mode prints a single line:
 
 ```
-{action: reply, channel: ..., thread_ts: ..., message_ts: ...}
+{assistant_question: ..., user_answer: null, is_answer: false, thread_ts: ..., message_ts: ...}
 ```
 
 ## Notes
@@ -52,3 +52,4 @@ Reply mode prints a single line:
 - Requires `SLACK_BOT_USER_OAUTH_TOKEN`.
 - Optional `SLACK_USER_OAUTH_TOKEN` is used for reading replies; if unset, the bot token is reused.
 - Missing history scopes will cause `missing_scope` errors; add `channels:history`, `groups:history`, `im:history`, and `mpim:history` as needed.
+- The CLI unescapes `\n`, `\r`, and `\t` sequences in `question` before sending.
