@@ -1,10 +1,16 @@
 # v0.3 Pavlok Client Tests (TDD)
 import pytest
+from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.models import Base, Configuration, ConfigValueType
-from backend.pavlok_lib import PavlokClient, stimulate_notification_for_user
+from backend.models import EventType, Schedule, ScheduleState
+from backend.pavlok_lib import (
+    PavlokClient,
+    stimulate_notification_for_user,
+    build_reason_for_schedule_id,
+)
 
 
 class TestPavlokClientValidation:
@@ -176,6 +182,35 @@ class TestPavlokClientWithMock:
         assert response["success"] is True
         assert response["value"] == 50  # default value
 
+    def test_stimulate_with_reason_sends_payload_reason(self):
+        """Test reason field is included in stimulus payload."""
+        captured_payload = {}
+
+        class MockResponse:
+            status_code = 200
+
+            def json(self):
+                return {"status": "ok"}
+
+            def raise_for_status(self):
+                pass
+
+        class MockHTTP:
+            def post(self, url, json, headers, timeout):
+                captured_payload.update(json)
+                return MockResponse()
+
+        client = PavlokClient(api_key="test-key", http_client=MockHTTP())
+        response = client.stimulate(
+            stimulus_type="vibe",
+            value=80,
+            reason="remind: ジム行く",
+        )
+
+        assert response["success"] is True
+        assert response["reason"] == "remind: ジム行く"
+        assert captured_payload["stimulus"]["reason"] == "remind: ジム行く"
+
     def test_zap_method(self):
         """Test convenience zap method"""
         class MockResponse:
@@ -301,7 +336,7 @@ class TestNotificationStimulusConfig:
         monkeypatch.setattr("backend.pavlok_lib.client._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.pavlok_lib.client._SESSION_DB_URL", None)
 
-        calls: list[tuple[str, int]] = []
+        calls: list[tuple[str, int, str]] = []
 
         class _FakePavlokClient:
             VALID_STIMULUS_TYPES = ("zap", "beep", "vibe")
@@ -309,15 +344,26 @@ class TestNotificationStimulusConfig:
             def __init__(self, *args, **kwargs):
                 pass
 
-            def stimulate(self, stimulus_type: str, value: int):
-                calls.append((stimulus_type, value))
-                return {"success": True, "type": stimulus_type, "value": value}
+            def stimulate(self, stimulus_type: str, value: int, reason: str = ""):
+                calls.append((stimulus_type, value, reason))
+                return {
+                    "success": True,
+                    "type": stimulus_type,
+                    "value": value,
+                    "reason": reason,
+                }
 
-        monkeypatch.setattr("backend.pavlok_lib.client.PavlokClient", _FakePavlokClient)
+        monkeypatch.setattr(
+            "backend.pavlok_lib.client.PavlokClient",
+            _FakePavlokClient,
+        )
 
-        result = stimulate_notification_for_user(user_id="U_TEST")
+        result = stimulate_notification_for_user(
+            user_id="U_TEST",
+            reason="plan: 今日のプランを登録してください",
+        )
         assert result["success"] is True
-        assert calls == [("vibe", 100)]
+        assert calls == [("vibe", 100, "plan: 今日のプランを登録してください")]
 
     def test_notification_stimulus_uses_user_config_values(self, tmp_path, monkeypatch):
         db_path = tmp_path / "notification_user_config.sqlite3"
@@ -352,7 +398,7 @@ class TestNotificationStimulusConfig:
         monkeypatch.setattr("backend.pavlok_lib.client._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.pavlok_lib.client._SESSION_DB_URL", None)
 
-        calls: list[tuple[str, int]] = []
+        calls: list[tuple[str, int, str]] = []
 
         class _FakePavlokClient:
             VALID_STIMULUS_TYPES = ("zap", "beep", "vibe")
@@ -360,15 +406,117 @@ class TestNotificationStimulusConfig:
             def __init__(self, *args, **kwargs):
                 pass
 
-            def stimulate(self, stimulus_type: str, value: int):
-                calls.append((stimulus_type, value))
-                return {"success": True, "type": stimulus_type, "value": value}
+            def stimulate(self, stimulus_type: str, value: int, reason: str = ""):
+                calls.append((stimulus_type, value, reason))
+                return {
+                    "success": True,
+                    "type": stimulus_type,
+                    "value": value,
+                    "reason": reason,
+                }
 
-        monkeypatch.setattr("backend.pavlok_lib.client.PavlokClient", _FakePavlokClient)
+        monkeypatch.setattr(
+            "backend.pavlok_lib.client.PavlokClient",
+            _FakePavlokClient,
+        )
 
-        result = stimulate_notification_for_user(user_id="U_TEST")
+        result = stimulate_notification_for_user(
+            user_id="U_TEST",
+            reason="remind: ジム行く",
+        )
         assert result["success"] is True
-        assert calls == [("beep", 80)]
+        assert calls == [("beep", 80, "remind: ジム行く")]
+
+    def test_build_reason_for_schedule_id_plan_and_remind(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "notification_reason.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        engine = create_engine(database_url, connect_args={"check_same_thread": False})
+        Base.metadata.create_all(bind=engine)
+        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+        session = Session()
+        try:
+            user_id = "U_TEST"
+            session.add(
+                Configuration(
+                    user_id=user_id,
+                    key="PAVLOK_TYPE_NOTION",
+                    value="vibe",
+                    value_type=ConfigValueType.STR,
+                )
+            )
+            session.add(
+                Configuration(
+                    user_id=user_id,
+                    key="PAVLOK_VALUE_NOTION",
+                    value="100",
+                    value_type=ConfigValueType.INT,
+                )
+            )
+            session.add(
+                Configuration(
+                    user_id=user_id,
+                    key="IGNORE_INTERVAL",
+                    value="900",
+                    value_type=ConfigValueType.INT,
+                )
+            )
+            session.add(
+                Configuration(
+                    user_id=user_id,
+                    key="TIMEOUT_REMIND",
+                    value="600",
+                    value_type=ConfigValueType.INT,
+                )
+            )
+            plan_schedule = Schedule(
+                user_id=user_id,
+                event_type=EventType.PLAN,
+                run_at=datetime.now(),
+                state=ScheduleState.PENDING,
+            )
+            from backend.models import Commitment
+
+            commitment = Commitment(
+                user_id=user_id,
+                task="ジム行く",
+                time="07:00:00",
+                active=True,
+            )
+            session.add(commitment)
+            session.flush()
+            remind_schedule = Schedule(
+                user_id=user_id,
+                event_type=EventType.REMIND,
+                commitment_id=commitment.id,
+                run_at=datetime(2026, 2, 19, 7, 0, 0),
+                state=ScheduleState.PENDING,
+            )
+            session.add_all([plan_schedule, remind_schedule])
+            session.flush()
+            plan_id = plan_schedule.id
+            remind_id = remind_schedule.id
+            session.add(
+                Configuration(
+                    user_id=user_id,
+                    key="COACH_CHARACTOR",
+                    value="ラムちゃん",
+                    value_type=ConfigValueType.STR,
+                )
+            )
+            session.commit()
+        finally:
+            session.close()
+
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.pavlok_lib.client._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.pavlok_lib.client._SESSION_DB_URL", None)
+
+        plan_reason = build_reason_for_schedule_id(plan_id)
+        remind_reason = build_reason_for_schedule_id(remind_id)
+
+        assert plan_reason == "plan: 今日のプランを登録してください"
+        assert remind_reason == "remind: ジム行く"
 
 
 class TestMockPavlokClientFixture:

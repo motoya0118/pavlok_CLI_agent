@@ -96,19 +96,30 @@ class TestInteractiveApi:
             state=ScheduleState.PENDING,
             comment="old next plan",
         )
+        morning_commitment = Commitment(
+            user_id=user_id,
+            task="朝やる",
+            time="06:00:00",
+            active=True,
+        )
+        noon_commitment = Commitment(
+            user_id=user_id,
+            task="昼やる",
+            time="12:00:00",
+            active=True,
+        )
+        session.add_all([morning_commitment, noon_commitment])
+        session.flush()
         old_pending_remind = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
+            commitment_id=morning_commitment.id,
             run_at=datetime.now() + timedelta(hours=2),
             state=ScheduleState.PENDING,
             comment="old remind",
         )
-        session.add_all([old_pending_plan, old_pending_remind])
         session.add_all(
-            [
-                Commitment(user_id=user_id, task="朝やる", time="06:00:00", active=True),
-                Commitment(user_id=user_id, task="昼やる", time="12:00:00", active=True),
-            ]
+            [old_pending_plan, old_pending_remind]
         )
         session.commit()
         opened_plan_id = opened_plan.id
@@ -210,6 +221,7 @@ class TestInteractiveApi:
             "06:00:00",
             "12:00:00",
         ]
+        assert all(r.commitment_id for r in remind_schedules)
 
         next_plan_schedules = (
             session.query(Schedule)
@@ -378,10 +390,20 @@ class TestInteractiveApi:
 
         session = Session()
         user_id = "U03JBULT484"
+        run_at = datetime.now().replace(microsecond=0)
+        commitment = Commitment(
+            user_id=user_id,
+            task="朝のジム",
+            time=run_at.strftime("%H:%M:%S"),
+            active=True,
+        )
+        session.add(commitment)
+        session.flush()
         schedule = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
-            run_at=datetime.now(),
+            commitment_id=commitment.id,
+            run_at=run_at,
             state=ScheduleState.PROCESSING,
             comment="朝のジム",
         )
@@ -444,10 +466,20 @@ class TestInteractiveApi:
 
         session = Session()
         user_id = "U03JBULT484"
+        run_at = datetime.now().replace(microsecond=0)
+        commitment = Commitment(
+            user_id=user_id,
+            task="朝のジム",
+            time=run_at.strftime("%H:%M:%S"),
+            active=True,
+        )
+        session.add(commitment)
+        session.flush()
         schedule = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
-            run_at=datetime.now(),
+            commitment_id=commitment.id,
+            run_at=run_at,
             state=ScheduleState.PROCESSING,
             comment="朝のジム",
         )
@@ -504,7 +536,14 @@ class TestInteractiveApi:
 
         captured: dict[str, str] = {}
 
-        async def _fake_notify_remind_result(channel_id, user_id, thread_ts, text, blocks):
+        async def _fake_notify_remind_result(
+            channel_id,
+            user_id,
+            thread_ts,
+            text,
+            blocks,
+            reason_text="",
+        ):
             captured["text"] = text
 
         monkeypatch.setattr(
@@ -522,17 +561,18 @@ class TestInteractiveApi:
         user_id = "U03JBULT484"
         run_at = datetime(2026, 2, 16, 7, 0, 0)
         session = Session()
-        session.add(
-            Commitment(
-                user_id=user_id,
-                task="ジム行く",
-                time="07:00:00",
-                active=True,
-            )
+        commitment = Commitment(
+            user_id=user_id,
+            task="ジム行く",
+            time="07:00:00",
+            active=True,
         )
+        session.add(commitment)
+        session.flush()
         schedule = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
+            commitment_id=commitment.id,
             run_at=run_at,
             state=ScheduleState.PROCESSING,
             comment="これはリマインド本文",
@@ -583,10 +623,20 @@ class TestInteractiveApi:
 
         session = Session()
         user_id = "U03JBULT484"
+        run_at = datetime.now().replace(microsecond=0)
+        commitment = Commitment(
+            user_id=user_id,
+            task="朝のジム",
+            time=run_at.strftime("%H:%M:%S"),
+            active=True,
+        )
+        session.add(commitment)
+        session.flush()
         schedule = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
-            run_at=datetime.now(),
+            commitment_id=commitment.id,
+            run_at=run_at,
             state=ScheduleState.PROCESSING,
             comment="朝のジム",
         )
@@ -668,10 +718,20 @@ class TestInteractiveApi:
                 value_type=ConfigValueType.INT,
             )
         )
+        run_at = datetime.now().replace(microsecond=0)
+        commitment = Commitment(
+            user_id=user_id,
+            task="タスク",
+            time=run_at.strftime("%H:%M:%S"),
+            active=True,
+        )
+        session.add(commitment)
+        session.flush()
         schedule = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
-            run_at=datetime.now(),
+            commitment_id=commitment.id,
+            run_at=run_at,
             state=ScheduleState.DONE,
         )
         session.add(schedule)
@@ -687,11 +747,11 @@ class TestInteractiveApi:
         schedule_id = schedule.id
         session.close()
 
-        calls: list[tuple[str, int]] = []
+        calls: list[tuple[str, int, str]] = []
 
         class _FakePavlokClient:
-            def stimulate(self, stimulus_type: str, value: int):
-                calls.append((stimulus_type, value))
+            def stimulate(self, stimulus_type: str, value: int, reason: str = ""):
+                calls.append((stimulus_type, value, reason))
                 return {"success": True}
 
         monkeypatch.setattr("backend.pavlok_lib.PavlokClient", _FakePavlokClient)
@@ -702,7 +762,7 @@ class TestInteractiveApi:
             punishment={"type": "zap", "value": 45},
         )
 
-        assert calls == [("zap", 45)]
+        assert calls == [("zap", 45, "remind: タスク")]
 
     @pytest.mark.asyncio
     async def test_send_no_punishment_skips_when_daily_limit_exceeded(
@@ -732,16 +792,27 @@ class TestInteractiveApi:
                 value_type=ConfigValueType.INT,
             )
         )
+        run_at = datetime.now().replace(microsecond=0)
+        commitment = Commitment(
+            user_id=user_id,
+            task="タスク",
+            time=run_at.strftime("%H:%M:%S"),
+            active=True,
+        )
+        session.add(commitment)
+        session.flush()
         schedule1 = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
-            run_at=datetime.now(),
+            commitment_id=commitment.id,
+            run_at=run_at,
             state=ScheduleState.DONE,
         )
         schedule2 = Schedule(
             user_id=user_id,
             event_type=EventType.REMIND,
-            run_at=datetime.now(),
+            commitment_id=commitment.id,
+            run_at=run_at + timedelta(minutes=1),
             state=ScheduleState.DONE,
         )
         session.add_all([schedule1, schedule2])
@@ -764,11 +835,11 @@ class TestInteractiveApi:
         schedule2_id = schedule2.id
         session.close()
 
-        calls: list[tuple[str, int]] = []
+        calls: list[tuple[str, int, str]] = []
 
         class _FakePavlokClient:
-            def stimulate(self, stimulus_type: str, value: int):
-                calls.append((stimulus_type, value))
+            def stimulate(self, stimulus_type: str, value: int, reason: str = ""):
+                calls.append((stimulus_type, value, reason))
                 return {"success": True}
 
         monkeypatch.setattr("backend.pavlok_lib.PavlokClient", _FakePavlokClient)

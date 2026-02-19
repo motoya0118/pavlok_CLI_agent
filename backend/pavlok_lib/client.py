@@ -83,10 +83,88 @@ def _load_notification_stimulus_settings(
     return stimulus_type, stimulus_value
 
 
+def _normalize_event_type(event_type: Any) -> str:
+    """Normalize schedule event_type enum/string to lowercase text."""
+    if hasattr(event_type, "value"):
+        raw = getattr(event_type, "value")
+    else:
+        raw = event_type
+    value = str(raw or "").strip().lower()
+    return value
+
+
+def _resolve_commitment_task_for_schedule(session, schedule) -> str:
+    """Resolve commitment task using schedule.commitment_id."""
+    from backend.models import Commitment
+
+    commitment_id = str(getattr(schedule, "commitment_id", "") or "").strip()
+    if not commitment_id:
+        fallback = str(getattr(schedule, "comment", "") or "").strip()
+        return fallback or "タスク"
+
+    row = (
+        session.query(Commitment.task)
+        .filter(
+            Commitment.id == commitment_id,
+        )
+        .first()
+    )
+    if row and row[0]:
+        return str(row[0])
+    fallback = str(getattr(schedule, "comment", "") or "").strip()
+    return fallback or "タスク"
+
+
+def build_reason_for_schedule(session, schedule) -> str:
+    """
+    Build Pavlok reason text from schedule.
+
+    Rule:
+    - plan: "plan: 今日のプランを登録してください"
+    - otherwise: "{event}: {commitment_task}"
+    """
+    event_name = _normalize_event_type(getattr(schedule, "event_type", ""))
+    if not event_name:
+        event_name = "remind"
+
+    if event_name == "plan":
+        return "plan: 今日のプランを登録してください"
+
+    task = _resolve_commitment_task_for_schedule(session, schedule)
+    return f"{event_name}: {task}"
+
+
+def build_reason_for_schedule_id(
+    schedule_id: str,
+    *,
+    session=None,
+) -> str:
+    """Build Pavlok reason text by schedule id."""
+    if not schedule_id:
+        return ""
+
+    from backend.models import Schedule
+
+    own_session = False
+    if session is None:
+        session = _get_session()
+        own_session = True
+
+    try:
+        schedule = session.query(Schedule).filter(Schedule.id == schedule_id).first()
+        if not schedule:
+            return ""
+        return build_reason_for_schedule(session, schedule)
+    finally:
+        if own_session:
+            session.close()
+
+
 def stimulate_notification_for_user(
     user_id: str,
     *,
     session=None,
+    reason: str = "",
     api_key: str | None = None,
     api_base: str | None = None,
     http_client: Any = None,
@@ -133,10 +211,16 @@ def stimulate_notification_for_user(
             "error": str(exc),
         }
 
-    result = client.stimulate(stimulus_type=stimulus_type, value=stimulus_value)
+    result = client.stimulate(
+        stimulus_type=stimulus_type,
+        value=stimulus_value,
+        reason=reason,
+    )
     if isinstance(result, dict):
         result.setdefault("type", stimulus_type)
         result.setdefault("value", stimulus_value)
+        if reason:
+            result.setdefault("reason", reason)
     return result
 
 
@@ -211,6 +295,7 @@ class PavlokClient:
         self,
         stimulus_type: str,
         value: int = 50,
+        reason: str = "",
         **kwargs
     ) -> dict[str, Any]:
         """
@@ -234,6 +319,8 @@ class PavlokClient:
                 "stimulusValue": value
             }
         }
+        if isinstance(reason, str) and reason.strip():
+            payload["stimulus"]["reason"] = reason.strip()
 
         try:
             response = self._post(url, payload)
@@ -243,6 +330,7 @@ class PavlokClient:
                 "success": True,
                 "type": stimulus_type,
                 "value": value,
+                "reason": reason.strip() if isinstance(reason, str) else "",
                 "raw": data
             }
         except Exception as e:
@@ -250,6 +338,7 @@ class PavlokClient:
                 "success": False,
                 "type": stimulus_type,
                 "value": value,
+                "reason": reason.strip() if isinstance(reason, str) else "",
                 "error": str(e)
             }
 

@@ -15,7 +15,7 @@ from backend.models import (
 from scripts.remind import build_remind_content, resolve_ignore_interval_minutes
 
 
-def test_build_remind_content_matches_commitment_by_time_and_uses_comment(tmp_path):
+def test_build_remind_content_resolves_task_by_commitment_id(tmp_path):
     db_path = tmp_path / "remind_script.sqlite3"
     engine = create_engine(
         f"sqlite:///{db_path}",
@@ -26,15 +26,14 @@ def test_build_remind_content_matches_commitment_by_time_and_uses_comment(tmp_pa
 
     session = Session()
     user_id = "U03JBULT484"
-    session.add_all(
-        [
-            Commitment(user_id=user_id, task="ジム行く", time="07:00:00", active=True),
-            Commitment(user_id=user_id, task="スマホ置いて寝る", time="21:00:00", active=True),
-        ]
-    )
+    morning = Commitment(user_id=user_id, task="ジム行く", time="07:00:00", active=True)
+    night = Commitment(user_id=user_id, task="スマホ置いて寝る", time="21:00:00", active=True)
+    session.add_all([morning, night])
+    session.flush()
     schedule = Schedule(
         user_id=user_id,
         event_type=EventType.REMIND,
+        commitment_id=night.id,
         run_at=datetime(2026, 2, 16, 21, 0, 0),
         state=ScheduleState.PENDING,
         comment="スマホ置いて寝る時間だっちゃ。充電は部屋の外、布団に直行！",

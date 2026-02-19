@@ -54,18 +54,16 @@ def build_remind_content(session, schedule) -> tuple[str, str, str]:
     else:
         task_time = "--:--:--"
 
-    # Match commitment by exact time to avoid picking unrelated active rows.
-    commitment = (
-        session.query(Commitment)
-        .filter_by(
-            user_id=schedule.user_id,
-            active=True,
-            time=task_time,
+    commitment_id = str(getattr(schedule, "commitment_id", "") or "").strip()
+    commitment = None
+    if commitment_id:
+        commitment = (
+            session.query(Commitment)
+            .filter(Commitment.id == commitment_id)
+            .first()
         )
-        .first()
-    )
 
-    if commitment:
+    if commitment and commitment.task:
         task_name = commitment.task
     else:
         task_name = (schedule.comment or "").strip() or "タスク"
@@ -120,6 +118,7 @@ def main():
             channel,
             token,
             user_id=str(schedule.user_id),
+            reason=f"remind: {task_name}",
         )
 
         # Save thread_ts for later updates

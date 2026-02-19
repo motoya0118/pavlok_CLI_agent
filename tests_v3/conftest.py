@@ -98,15 +98,50 @@ def v3_test_data_factory(v3_db_session, v3_test_user_id):
             state: ScheduleState = ScheduleState.PENDING,
             thread_ts: str | None = None,
             retry_count: int = 0,
+            commitment_id: str | None = None,
+            comment: str | None = None,
         ) -> Schedule:
             if run_at is None:
                 run_at = datetime.now() + timedelta(hours=1)
+
+            resolved_commitment_id = commitment_id
+            resolved_comment = comment
+            if event_type == EventType.REMIND:
+                commitment = None
+                if not resolved_commitment_id:
+                    run_time = run_at.strftime("%H:%M:%S")
+                    commitment = (
+                        self.session.query(Commitment)
+                        .filter(
+                            Commitment.user_id == self.user_id,
+                            Commitment.active.is_(True),
+                            Commitment.time == run_time,
+                        )
+                        .order_by(Commitment.updated_at.desc(), Commitment.created_at.desc())
+                        .first()
+                    )
+                    if commitment is None:
+                        commitment = Commitment(
+                            user_id=self.user_id,
+                            time=run_time,
+                            task=resolved_comment or "test task",
+                            active=True,
+                        )
+                        self.session.add(commitment)
+                        self.session.flush()
+                    resolved_commitment_id = str(commitment.id)
+
+                if not resolved_comment and commitment is not None:
+                    resolved_comment = commitment.task
+
             schedule = Schedule(
                 user_id=self.user_id,
                 event_type=event_type,
+                commitment_id=resolved_commitment_id if event_type == EventType.REMIND else None,
                 run_at=run_at,
                 state=state,
                 thread_ts=thread_ts,
+                comment=resolved_comment,
                 retry_count=retry_count,
             )
             self.session.add(schedule)

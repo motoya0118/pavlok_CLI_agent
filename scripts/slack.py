@@ -32,6 +32,7 @@ def post_message(
     token: str,
     text: str = "notification",
     user_id: str = "",
+    reason: str = "",
 ):
     """Post a Block Kit message to Slack and validate response."""
     response = requests.post(
@@ -64,12 +65,16 @@ def post_message(
         try:
             from backend.pavlok_lib import stimulate_notification_for_user
 
-            pavlok_result = stimulate_notification_for_user(user_id=user_id)
+            pavlok_result = stimulate_notification_for_user(
+                user_id=user_id,
+                reason=reason,
+            )
             if isinstance(pavlok_result, dict) and pavlok_result.get("success"):
                 print(
                     "notification stimulus sent: "
                     f"user_id={user_id} "
-                    f"type={pavlok_result.get('type')} value={pavlok_result.get('value')}"
+                    f"type={pavlok_result.get('type')} value={pavlok_result.get('value')} "
+                    f"reason={pavlok_result.get('reason') or reason}"
                 )
             else:
                 print(

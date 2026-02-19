@@ -31,13 +31,17 @@ def calculate_ignore_punishment(ignore_time: int) -> Dict[str, Any]:
     return {"type": "zap", "value": zap_value}
 
 
-def _send_punishment(stimulus_type: str, value: int) -> bool:
+def _send_punishment(stimulus_type: str, value: int, reason: str = "") -> bool:
     """Send Pavlok stimulus. Return True on success."""
     try:
         from backend.pavlok_lib import PavlokClient
 
         client = PavlokClient()
-        result = client.stimulate(stimulus_type=stimulus_type, value=value)
+        result = client.stimulate(
+            stimulus_type=stimulus_type,
+            value=value,
+            reason=reason,
+        )
     except Exception:
         return False
 
@@ -162,6 +166,13 @@ def detect_ignore_mode(session: Session, schedule) -> Dict[str, Any]:
     punishment_data = calculate_ignore_punishment(ignore_time)
     stimulus_type = str(punishment_data["type"])
     value = int(punishment_data["value"])
+    reason_text = ""
+    try:
+        from backend.pavlok_lib import build_reason_for_schedule
+
+        reason_text = build_reason_for_schedule(session, schedule)
+    except Exception:
+        reason_text = ""
 
     if stimulus_type == "zap":
         zap_limit = _safe_int(
@@ -175,7 +186,11 @@ def detect_ignore_mode(session: Session, schedule) -> Dict[str, Any]:
             return {"detected": True, "ignore_time": ignore_time}
 
     # If the Pavlok call fails, do not record the trigger index so it can retry.
-    sent = _send_punishment(stimulus_type=stimulus_type, value=value)
+    sent = _send_punishment(
+        stimulus_type=stimulus_type,
+        value=value,
+        reason=reason_text,
+    )
     if not sent:
         return {"detected": False, "ignore_time": ignore_time}
 

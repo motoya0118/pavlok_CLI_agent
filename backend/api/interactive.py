@@ -381,6 +381,7 @@ async def _notify_plan_saved(
         await _send_notification_stimulus(
             user_id=user_id,
             source="plan-submit",
+            reason="plan: 今日のプランを登録してください",
         )
     else:
         print(f"[{datetime.now()}] plan-submit notification failed: {reason}")
@@ -389,6 +390,7 @@ async def _notify_plan_saved(
 async def _send_notification_stimulus(
     user_id: str,
     source: str,
+    reason: str = "",
 ) -> None:
     """Send per-user Pavlok stimulus for Slack notification events."""
     if not user_id:
@@ -397,7 +399,7 @@ async def _send_notification_stimulus(
     def _send() -> dict[str, Any]:
         from backend.pavlok_lib import stimulate_notification_for_user
 
-        result = stimulate_notification_for_user(user_id=user_id)
+        result = stimulate_notification_for_user(user_id=user_id, reason=reason)
         return result if isinstance(result, dict) else {"success": False, "error": str(result)}
 
     result = await asyncio.to_thread(_send)
@@ -405,7 +407,8 @@ async def _send_notification_stimulus(
         print(
             f"[{datetime.now()}] notification-stimulus sent: "
             f"user_id={user_id} source={source} "
-            f"type={result.get('type')} value={result.get('value')}"
+            f"type={result.get('type')} value={result.get('value')} "
+            f"reason={result.get('reason') or reason}"
         )
     else:
         print(
@@ -532,31 +535,29 @@ def _load_active_commitments_for_user(user_id: str) -> list[dict[str, str]]:
             .limit(MAX_COMMITMENT_ROWS)
             .all()
         )
-        return [{"task": row.task, "time": row.time} for row in rows]
+        return [{"id": str(row.id), "task": row.task, "time": row.time} for row in rows]
     finally:
         session.close()
 
 
 def _resolve_commitment_task_name_for_schedule(session, schedule) -> str:
-    """Resolve task name from active commitments using schedule run time."""
-    run_at = getattr(schedule, "run_at", None)
-    if not isinstance(run_at, datetime):
-        return "タスク"
+    """Resolve task name from commitment_id linked to schedule."""
+    commitment_id = getattr(schedule, "commitment_id", None)
+    if not commitment_id:
+        fallback = str(getattr(schedule, "comment", "") or "").strip()
+        return fallback or "タスク"
 
-    run_time = run_at.strftime("%H:%M:%S")
     row = (
         session.query(Commitment.task)
         .filter(
-            Commitment.user_id == schedule.user_id,
-            Commitment.active.is_(True),
-            Commitment.time == run_time,
+            Commitment.id == str(commitment_id),
         )
-        .order_by(Commitment.updated_at.desc(), Commitment.created_at.desc())
         .first()
     )
     if row and row[0]:
         return str(row[0])
-    return "タスク"
+    fallback = str(getattr(schedule, "comment", "") or "").strip()
+    return fallback or "タスク"
 
 
 def _extract_schedule_id_from_action(payload_data: Dict[str, Any]) -> str:
@@ -999,20 +1000,38 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
     remind_rows_to_save: list[dict[str, Any]] = []
     skipped_task_names: list[str] = []
     scheduled_tasks_for_message: list[dict[str, str]] = []
+    mapping_errors: Dict[str, str] = {}
     for row in task_rows:
         commitment_idx = row["index"] - 1
-        task_name = (
-            active_commitments[commitment_idx]["task"]
-            if 0 <= commitment_idx < len(active_commitments)
-            else f"タスク{row['index']}"
-        )
+        if commitment_idx < 0 or commitment_idx >= len(active_commitments):
+            mapping_errors[f"task_{row['index']}_time"] = (
+                "コミットメント情報の整合性が取れませんでした。"
+                "/base_commit から再設定してください。"
+            )
+            continue
+
+        mapped_commitment = active_commitments[commitment_idx]
+        commitment_id = str(mapped_commitment.get("id", "")).strip()
+        task_name = mapped_commitment.get("task", "").strip() or f"タスク{row['index']}"
+        if not commitment_id:
+            mapping_errors[f"task_{row['index']}_time"] = (
+                "コミットメントIDを解決できませんでした。"
+                "/base_commit から再設定してください。"
+            )
+            continue
 
         if row["skip"]:
             skipped_task_names.append(task_name)
             continue
 
         run_at = _resolve_relative_datetime(row["date"], row["time"])
-        remind_rows_to_save.append({"run_at": run_at, "task": task_name})
+        remind_rows_to_save.append(
+            {
+                "run_at": run_at,
+                "task": task_name,
+                "commitment_id": commitment_id,
+            }
+        )
 
         scheduled_tasks_for_message.append(
             {
@@ -1021,6 +1040,12 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
                 "time": row["time"][:5],
             }
         )
+
+    if mapping_errors:
+        return {
+            "response_action": "errors",
+            "errors": mapping_errors,
+        }
 
     metadata = _extract_submission_metadata(payload_data)
     schedule_id = metadata.get("schedule_id", "")
@@ -1076,6 +1101,7 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
             remind_schedule = Schedule(
                 user_id=user_id,
                 event_type=EventType.REMIND,
+                commitment_id=reminder["commitment_id"],
                 run_at=reminder["run_at"],
                 state=ScheduleState.PENDING,
                 retry_count=0,
@@ -1422,11 +1448,23 @@ async def _send_no_punishment(
             )
             return
 
+    reason_text = ""
+    try:
+        from backend.pavlok_lib import build_reason_for_schedule_id
+
+        reason_text = build_reason_for_schedule_id(schedule_id)
+    except Exception:
+        reason_text = ""
+
     def _send() -> tuple[bool, str]:
         try:
             from backend.pavlok_lib import PavlokClient
             client = PavlokClient()
-            result = client.stimulate(stimulus_type=stimulus_type, value=value)
+            result = client.stimulate(
+                stimulus_type=stimulus_type,
+                value=value,
+                reason=reason_text,
+            )
         except Exception as exc:
             return False, str(exc)
 
@@ -1439,7 +1477,8 @@ async def _send_no_punishment(
         print(
             f"[{datetime.now()}] no-punishment sent: "
             f"user_id={user_id} schedule_id={schedule_id} "
-            f"type={stimulus_type} value={value}"
+            f"type={stimulus_type} value={value} "
+            f"reason={reason_text or '-'}"
         )
     else:
         print(
@@ -1455,6 +1494,7 @@ async def _notify_remind_result(
     thread_ts: str,
     text: str,
     blocks: list[dict[str, Any]],
+    reason_text: str = "",
 ) -> None:
     """Post remind result as a threaded Slack message."""
     bot_token = os.getenv("SLACK_BOT_USER_OAUTH_TOKEN")
@@ -1511,7 +1551,7 @@ async def _notify_remind_result(
             return False, f"chat.postMessage error: {post_body.get('error')}"
         return True, "ok"
 
-    ok, reason = await asyncio.to_thread(_post)
+    ok, post_detail = await asyncio.to_thread(_post)
     if ok:
         print(
             f"[{datetime.now()}] remind-result notification sent: "
@@ -1520,9 +1560,10 @@ async def _notify_remind_result(
         await _send_notification_stimulus(
             user_id=user_id,
             source="remind-result",
+            reason=reason_text,
         )
     else:
-        print(f"[{datetime.now()}] remind-result notification failed: {reason}")
+        print(f"[{datetime.now()}] remind-result notification failed: {post_detail}")
 
 
 async def process_remind_response(payload_data: Dict[str, Any], action: str = "YES") -> Dict[str, Any]:
@@ -1657,6 +1698,7 @@ async def process_remind_response(payload_data: Dict[str, Any], action: str = "Y
             thread_ts=thread_ts,
             text=text,
             blocks=blocks,
+            reason_text=f"remind: {task_name}",
         )
     )
     if action_value == "NO":

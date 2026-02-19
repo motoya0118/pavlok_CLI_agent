@@ -102,7 +102,7 @@ class TestV3Migration:
         columns = {c["name"] for c in inspector.get_columns("schedules")}
 
         expected_columns = {
-            "id", "user_id", "event_type", "run_at", "state",
+            "id", "user_id", "event_type", "commitment_id", "run_at", "state",
             "thread_ts", "comment", "yes_comment", "no_comment",
             "retry_count", "created_at", "updated_at"
         }

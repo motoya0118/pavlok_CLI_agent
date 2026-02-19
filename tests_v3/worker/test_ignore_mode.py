@@ -31,7 +31,7 @@ class TestIgnoreModeDetection:
 
         from backend.worker import ignore_mode
         original_send = ignore_mode._send_punishment
-        ignore_mode._send_punishment = lambda stimulus_type, value: True
+        ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
         ignore_mode._send_punishment = original_send
 
@@ -53,7 +53,7 @@ class TestIgnoreModeDetection:
 
         from backend.worker import ignore_mode
         original_send = ignore_mode._send_punishment
-        ignore_mode._send_punishment = lambda stimulus_type, value: True
+        ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
         ignore_mode._send_punishment = original_send
 
@@ -119,7 +119,7 @@ class TestIgnoreModeDetection:
 
         from backend.worker import ignore_mode
         original_send = ignore_mode._send_punishment
-        ignore_mode._send_punishment = lambda stimulus_type, value: True
+        ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
         ignore_mode._send_punishment = original_send
 
@@ -142,7 +142,7 @@ class TestIgnoreModeDetection:
 
         from backend.worker import ignore_mode
         original_send = ignore_mode._send_punishment
-        ignore_mode._send_punishment = lambda stimulus_type, value: True
+        ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
         ignore_mode._send_punishment = original_send
 
@@ -181,7 +181,7 @@ class TestIgnoreModeDetection:
             return default
 
         monkeypatch.setattr("backend.worker.config_cache.get_config", _fake_get_config)
-        ignore_mode._send_punishment = lambda stimulus_type, value: True
+        ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
 
         first = detect_ignore_mode(v3_db_session, schedule)
         second = detect_ignore_mode(v3_db_session, schedule)

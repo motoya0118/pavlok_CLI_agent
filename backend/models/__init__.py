@@ -3,7 +3,19 @@ v0.3 Database Models
 
 Oni System v0.3で使用するデータベースモデル定義
 """
-from sqlalchemy import Column, DateTime, Integer, String, Text, Boolean, Enum as SQLEnum, JSON, UniqueConstraint, CheckConstraint
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    Enum as SQLEnum,
+    JSON,
+    UniqueConstraint,
+    CheckConstraint,
+    ForeignKey,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from datetime import datetime
 import uuid
@@ -95,6 +107,12 @@ class Schedule(Base, UUIDMixin, TimestampMixin):
 
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(SQLEnum(EventType), nullable=False)
+    commitment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("commitments.id"),
+        nullable=True,
+        index=True,
+    )
     run_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     state: Mapped[str] = mapped_column(SQLEnum(ScheduleState), nullable=False, default=ScheduleState.PENDING)
     thread_ts: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -102,6 +120,14 @@ class Schedule(Base, UUIDMixin, TimestampMixin):
     yes_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     no_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(upper(event_type) = 'REMIND' AND commitment_id IS NOT NULL) OR "
+            "(upper(event_type) = 'PLAN' AND commitment_id IS NULL)",
+            name="ck_schedules_event_commitment_id",
+        ),
+    )
 
 
 class ActionLog(Base, UUIDMixin):

@@ -107,6 +107,7 @@ def main():
             channel,
             token,
             user_id=str(schedule.user_id),
+            reason="plan: 今日のプランを登録してください",
         )
 
         # Save thread_ts for later updates
