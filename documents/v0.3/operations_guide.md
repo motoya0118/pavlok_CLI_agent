@@ -52,64 +52,160 @@ systemctl restart oni-worker
 
 ### 2.1 systemdサービス定義
 
-**/etc/systemd/system/oni-api.service**
-```ini
-[Unit]
-Description=Oni System API
-After=network.target
+`init.sh` から流用できるよう、実行ユーザーを動的解決する手順にします。
 
-[Service]
-Type=simple
-User=oni
-WorkingDirectory=/opt/oni
-Environment="PATH=/opt/oni/.venv/bin"
-ExecStart=/opt/oni/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
-Restart=always
+```bash
+# sudo 実行時は SUDO_USER を優先。未指定なら現在ユーザー。
+export SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$USER}}"
+export SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
+export SERVICE_HOME="${SERVICE_HOME:-$(getent passwd "$SERVICE_USER" | cut -d: -f6)}"
+if [ -z "$SERVICE_HOME" ]; then
+  export SERVICE_HOME="/home/$SERVICE_USER"
+fi
 
-[Install]
-WantedBy=multi-user.target
+# 必要なら外から上書き可能
+export APP_DIR="${APP_DIR:-$SERVICE_HOME/pavlok_CLI_agent}"
+export LOG_DIR="${LOG_DIR:-$APP_DIR/backend/log}"
+
+mkdir -p "$LOG_DIR"
 ```
 
-**/etc/systemd/system/oni-worker.service**
-```ini
+```bash
+# /etc/systemd/system/oni-api.service
+sudo tee /etc/systemd/system/oni-api.service >/dev/null <<EOF
 [Unit]
-Description=Oni System Worker
-After=network.target
+Description=Oni System FastAPI
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=oni
-WorkingDirectory=/opt/oni
-Environment="PATH=/opt/oni/.venv/bin"
-ExecStart=/opt/oni/.venv/bin/python -m backend.worker.worker
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
+WorkingDirectory=$APP_DIR
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-$APP_DIR/.env
+ExecStart=$APP_DIR/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Restart=always
+RestartSec=5
+StandardOutput=append:$LOG_DIR/uvicorn.out
+StandardError=append:$LOG_DIR/uvicorn.out
 
 [Install]
 WantedBy=multi-user.target
+EOF
+```
+
+```bash
+# /etc/systemd/system/oni-worker.service
+sudo tee /etc/systemd/system/oni-worker.service >/dev/null <<EOF
+[Unit]
+Description=Oni System Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
+WorkingDirectory=$APP_DIR
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-$APP_DIR/.env
+ExecStart=$APP_DIR/.venv/bin/python -m backend.worker.worker
+Restart=always
+RestartSec=5
+StandardOutput=append:$LOG_DIR/worker.out
+StandardError=append:$LOG_DIR/worker.out
+
+[Install]
+WantedBy=multi-user.target
+EOF
 ```
 
 ### 2.2 サービス操作コマンド
 
 ```bash
-# ステータス確認
-systemctl status oni-api
-systemctl status oni-worker
+# 変数を設定（2.1と同じ）
+export SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$USER}}"
+export SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
+export SERVICE_HOME="${SERVICE_HOME:-$(getent passwd "$SERVICE_USER" | cut -d: -f6)}"
+if [ -z "$SERVICE_HOME" ]; then
+  export SERVICE_HOME="/home/$SERVICE_USER"
+fi
+export APP_DIR="${APP_DIR:-$SERVICE_HOME/pavlok_CLI_agent}"
+export LOG_DIR="${LOG_DIR:-$APP_DIR/backend/log}"
 
-# 起動
-systemctl start oni-api
-systemctl start oni-worker
+# ユニット反映
+sudo systemctl daemon-reload
 
-# 停止
-systemctl stop oni-api
-systemctl stop oni-worker
+# 自動起動有効化 + 起動
+sudo systemctl enable --now oni-api oni-worker
+
+# 稼働確認
+sudo systemctl status oni-api --no-pager
+sudo systemctl status oni-worker --no-pager
+sudo systemctl is-active oni-api oni-worker
 
 # 再起動
-systemctl restart oni-api
-systemctl restart oni-worker
+sudo systemctl restart oni-api oni-worker
 
-# ログ確認
-journalctl -u oni-api -f
-journalctl -u oni-worker -f
+# 停止
+sudo systemctl stop oni-api oni-worker
+
+# 起動
+sudo systemctl start oni-api oni-worker
+
+# ヘルスチェック
+curl -sS http://127.0.0.1:8000/health
+
+# ログ確認（journal）
+sudo journalctl -u oni-api -f
+sudo journalctl -u oni-worker -f
+
+# ログ確認（ファイル）
+tail -f "$LOG_DIR/uvicorn.out"
+tail -f "$LOG_DIR/worker.out"
+```
+
+### 2.3 ログローテート設定（必須）
+
+`systemd` で `StandardOutput=append:` を使っているため、`logrotate` で肥大化を防ぎます。
+
+```bash
+# 変数を設定（2.1と同じ）
+export SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$USER}}"
+export SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
+export SERVICE_HOME="${SERVICE_HOME:-$(getent passwd "$SERVICE_USER" | cut -d: -f6)}"
+if [ -z "$SERVICE_HOME" ]; then
+  export SERVICE_HOME="/home/$SERVICE_USER"
+fi
+export APP_DIR="${APP_DIR:-$SERVICE_HOME/pavlok_CLI_agent}"
+export LOG_DIR="${LOG_DIR:-$APP_DIR/backend/log}"
+
+# /etc/logrotate.d/oni-system
+sudo tee /etc/logrotate.d/oni-system >/dev/null <<EOF
+$LOG_DIR/uvicorn.out $LOG_DIR/worker.out {
+    daily
+    rotate 14
+    size 20M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su $SERVICE_USER $SERVICE_GROUP
+    create 0640 $SERVICE_USER $SERVICE_GROUP
+}
+EOF
+
+# 設定確認（dry run）
+sudo logrotate -d /etc/logrotate.d/oni-system
+
+# 手動実行テスト
+sudo logrotate -f /etc/logrotate.d/oni-system
+
+# 反映確認
+ls -lh "$LOG_DIR"
 ```
 
 ---
