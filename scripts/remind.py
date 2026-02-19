@@ -21,6 +21,30 @@ from backend.slack_lib.blockkit import BlockKitBuilder
 from scripts import slack
 
 
+def resolve_ignore_interval_minutes(session, user_id: str) -> int:
+    """Resolve IGNORE_INTERVAL (seconds) from user config and convert to minutes."""
+    from backend.models import Configuration
+
+    interval_seconds = 900
+    row = (
+        session.query(Configuration.value)
+        .filter(
+            Configuration.user_id == user_id,
+            Configuration.key == "IGNORE_INTERVAL",
+        )
+        .first()
+    )
+    if row and row[0] is not None:
+        try:
+            interval_seconds = int(str(row[0]))
+        except (TypeError, ValueError):
+            interval_seconds = 900
+
+    if interval_seconds <= 0:
+        interval_seconds = 900
+    return max(1, interval_seconds // 60)
+
+
 def build_remind_content(session, schedule) -> tuple[str, str, str]:
     """Resolve task name/time/description for remind notification."""
     from backend.models import Commitment
@@ -73,6 +97,10 @@ def main():
             sys.exit(1)
 
         task_name, task_time, description = build_remind_content(session, schedule)
+        ignore_interval_minutes = resolve_ignore_interval_minutes(
+            session=session,
+            user_id=str(schedule.user_id),
+        )
 
         # Get channel
         channel = slack.require_channel()
@@ -83,7 +111,8 @@ def main():
             schedule_id=schedule_id,
             task_name=task_name,
             task_time=task_time,
-            description=description
+            description=description,
+            ignore_interval_minutes=ignore_interval_minutes,
         )
 
         response = slack.post_message(blocks, channel, token)

@@ -10,9 +10,11 @@ class TestBlockKitBuilder:
     def test_plan_open_notification_blocks(self):
         """Test plan open notification blocks generation"""
         user_id = "U03JBULT484"
+        ignore_interval_minutes = 10
         blocks = BlockKitBuilder.plan_open_notification(
             schedule_id="test-schedule-123",
             user_id=user_id,
+            ignore_interval_minutes=ignore_interval_minutes,
         )
 
         assert isinstance(blocks, list)
@@ -40,17 +42,23 @@ class TestBlockKitBuilder:
         value_dict = json.loads(button["value"])
         assert value_dict["schedule_id"] == "test-schedule-123"
 
+        context_blocks = [b for b in blocks if b.get("type") == "context"]
+        assert len(context_blocks) == 1
+        assert f"{ignore_interval_minutes}分後" in context_blocks[0]["elements"][0]["text"]
+
     def test_remind_notification_blocks(self):
         """Test remind notification blocks with YES/NO buttons"""
         task_name = "朝の瞑想"
         task_time = "07:00"
         description = "静かな場所で5分間、呼吸に集中しましょう。準備はできましたか？"
+        ignore_interval_minutes = 10
 
         blocks = BlockKitBuilder.remind_notification(
             schedule_id="test-schedule-456",
             task_name=task_name,
             task_time=task_time,
-            description=description
+            description=description,
+            ignore_interval_minutes=ignore_interval_minutes,
         )
 
         assert isinstance(blocks, list)
@@ -82,6 +90,10 @@ class TestBlockKitBuilder:
         no_btn = actions["elements"][1]
         assert no_btn["action_id"] == "remind_no"
         assert no_btn["style"] == "danger"
+
+        context_blocks = [b for b in blocks if b.get("type") == "context"]
+        assert len(context_blocks) == 1
+        assert f"{ignore_interval_minutes}分ごと" in context_blocks[0]["elements"][0]["text"]
 
     def test_ignore_notification_blocks(self):
         """Test ignore notification blocks"""

@@ -6,8 +6,6 @@ planイベント実行：24時間分の予定をSlackに投稿
 """
 import os
 import sys
-import json
-from datetime import datetime, timedelta
 from pathlib import Path
 
 # Add project root to path
@@ -20,6 +18,30 @@ load_dotenv()
 
 from backend.slack_lib.blockkit import BlockKitBuilder
 from scripts import slack
+
+
+def resolve_ignore_interval_minutes(session, user_id: str) -> int:
+    """Resolve IGNORE_INTERVAL (seconds) from user config and convert to minutes."""
+    from backend.models import Configuration
+
+    interval_seconds = 900
+    row = (
+        session.query(Configuration.value)
+        .filter(
+            Configuration.user_id == user_id,
+            Configuration.key == "IGNORE_INTERVAL",
+        )
+        .first()
+    )
+    if row and row[0] is not None:
+        try:
+            interval_seconds = int(str(row[0]))
+        except (TypeError, ValueError):
+            interval_seconds = 900
+
+    if interval_seconds <= 0:
+        interval_seconds = 900
+    return max(1, interval_seconds // 60)
 
 
 def main():
@@ -67,12 +89,17 @@ def main():
 
         # Get channel
         channel = slack.require_channel()
+        ignore_interval_minutes = resolve_ignore_interval_minutes(
+            session=session,
+            user_id=str(schedule.user_id),
+        )
 
         # Post plan open notification
         token = slack.require_bot_token()
         blocks = BlockKitBuilder.plan_open_notification(
             schedule_id=schedule_id,
             user_id=str(schedule.user_id),
+            ignore_interval_minutes=ignore_interval_minutes,
         )
 
         response = slack.post_message(blocks, channel, token)

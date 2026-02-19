@@ -645,8 +645,15 @@ def audit_log_display(audit_logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # Plan Event UI
 # ============================================================================
 
-def plan_start_notification(schedule_id: str, user_id: str = "") -> list[dict[str, Any]]:
+def plan_start_notification(
+    schedule_id: str,
+    user_id: str = "",
+    ignore_interval_minutes: int = 15,
+) -> list[dict[str, Any]]:
     """Generate plan start notification blocks"""
+    if ignore_interval_minutes < 1:
+        ignore_interval_minutes = 1
+
     blocks: list[dict[str, Any]] = [
         {
             "type": "header",
@@ -698,7 +705,10 @@ def plan_start_notification(schedule_id: str, user_id: str = "") -> list[dict[st
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": "⏰ 応答がない場合、15分後に催促が始まります",
+                    "text": (
+                        f"⏰ 応答がない場合、"
+                        f"{ignore_interval_minutes}分後に催促が始まります"
+                    ),
                 },
             ],
         },
@@ -916,8 +926,12 @@ def remind_post(
     task_name: str,
     task_time: str,
     description: str,
+    ignore_interval_minutes: int = 15,
 ) -> list[dict[str, Any]]:
     """Generate remind post blocks"""
+    if ignore_interval_minutes < 1:
+        ignore_interval_minutes = 1
+
     return [
         {
             "type": "header",
@@ -970,7 +984,10 @@ def remind_post(
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": "⚠️ 応答がない場合、15分ごとにPavlokが動作します",
+                    "text": (
+                        f"⚠️ 応答がない場合、"
+                        f"{ignore_interval_minutes}分ごとにPavlokが動作します"
+                    ),
                 },
             ],
         },

@@ -243,7 +243,12 @@ class TestBlockKitPlan:
 
         schedule_id = "123"
         user_id = "U03JBULT484"
-        blocks = plan_start_notification(schedule_id, user_id=user_id)
+        ignore_interval_minutes = 10
+        blocks = plan_start_notification(
+            schedule_id,
+            user_id=user_id,
+            ignore_interval_minutes=ignore_interval_minutes,
+        )
 
         assert isinstance(blocks, list)
         assert blocks[0]["type"] == "header"
@@ -255,6 +260,10 @@ class TestBlockKitPlan:
             and b.get("text", {}).get("text") == f"<@{user_id}>"
         ]
         assert len(mention_sections) == 1
+
+        context_blocks = [b for b in blocks if b.get("type") == "context"]
+        assert len(context_blocks) == 1
+        assert f"{ignore_interval_minutes}分後" in context_blocks[0]["elements"][0]["text"]
 
         # Should have button to open modal
         actions = [b for b in blocks if b.get("type") == "actions"]
@@ -316,8 +325,15 @@ class TestBlockKitRemind:
         task_name = "朝の瞑想"
         task_time = "07:00"
         description = "静かな場所で5分間、呼吸に集中しましょう。\n準備はできましたか？"
+        ignore_interval_minutes = 10
 
-        blocks = remind_post(schedule_id, task_name, task_time, description)
+        blocks = remind_post(
+            schedule_id,
+            task_name,
+            task_time,
+            description,
+            ignore_interval_minutes=ignore_interval_minutes,
+        )
 
         assert isinstance(blocks, list)
         assert blocks[0]["type"] == "header"
@@ -338,6 +354,10 @@ class TestBlockKitRemind:
         assert no_btn["style"] == "danger"
         assert schedule_id in yes_btn.get("value", "")
         assert schedule_id in no_btn.get("value", "")
+
+        context_blocks = [b for b in blocks if b.get("type") == "context"]
+        assert len(context_blocks) == 1
+        assert f"{ignore_interval_minutes}分ごと" in context_blocks[0]["elements"][0]["text"]
 
     def test_remind_yes_response(self):
         """YES response should show completion"""
