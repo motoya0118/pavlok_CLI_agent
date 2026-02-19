@@ -22,9 +22,6 @@ v0.3_design.mdとv0.3_slack_ui_spec.mdで設定値の定義に差分がある。
 | `IGNORE_INTERVAL` | 900 | int | 300-1800 | static_select | Worker: ignore検知間隔(秒) |
 | `IGNORE_JUDGE_TIME` | 3 | int | 1-30 | plain_text_input | Worker: ignore判定時間(秒) |
 | `IGNORE_MAX_RETRY` | 5 | int | 1-20 | plain_text_input | Worker: ignore最大再試行回数 |
-| `TIMEOUT_REMIND` | 600 | int | 60-3600 | plain_text_input | Worker: remind応答タイムアウト(秒) |
-| `TIMEOUT_REVIEW` | 600 | int | 60-3600 | plain_text_input | Worker: 振り返りタイムアウト(秒) |
-| `RETRY_DELAY` | 5 | int | 1-60 | static_select | Worker: 失敗時リトライ遅延(分) |
 | `SYSTEM_PAUSED` | false | bool | true/false | なし（/stop,/restartで制御） | Worker: 罰停止フラグ |
 
 #### ❌ 削除する設定値（v0.3_design.mdにあったが採用しない）
@@ -53,6 +50,9 @@ v0.3_design.mdとv0.3_slack_ui_spec.mdで設定値の定義に差分がある。
 | `TIMEZONE` | システムタイムゾーン |
 | `AGENT_MODE` | Agent実行モード |
 | `AUTHORIZED_USERS` | 認可ユーザーリスト |
+| `TIMEOUT_REMIND` | remind応答タイムアウト(秒) |
+| `TIMEOUT_REVIEW` | 振り返り応答タイムアウト(秒) |
+| `RETRY_DELAY` | 失敗時リトライ遅延(分) |
 
 ### 設定値の命名規則
 
@@ -124,28 +124,6 @@ CONFIG_DEFINITIONS = {
         "min": 1,
         "max": 20,
         "description": "ignore最大再試行回数"
-    },
-    "TIMEOUT_REMIND": {
-        "type": "int",
-        "default": 600,
-        "min": 60,
-        "max": 3600,
-        "description": "リマインド応答タイムアウト(秒)"
-    },
-    "TIMEOUT_REVIEW": {
-        "type": "int",
-        "default": 600,
-        "min": 60,
-        "max": 3600,
-        "description": "振り返り応答タイムアウト(秒)"
-    },
-    "RETRY_DELAY": {
-        "type": "int",
-        "default": 5,
-        "min": 1,
-        "max": 60,
-        "description": "失敗時リトライ遅延(分)",
-        "ui_options": [1, 3, 5, 10, 15]
     }
 }
 ```
@@ -153,9 +131,14 @@ CONFIG_DEFINITIONS = {
 ### 設定値の優先順位
 
 ```
+通常キー:
 1. DB設定値 (configurationsテーブル)
 2. 環境変数 (.env)
 3. ハードコードされたデフォルト値
+
+運用キー（`TIMEOUT_REMIND` / `TIMEOUT_REVIEW` / `RETRY_DELAY`）:
+1. 環境変数 (.env)
+2. ハードコードされたデフォルト値
 ```
 
 ## Consequences

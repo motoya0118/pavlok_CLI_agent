@@ -51,10 +51,10 @@ def _load_notification_stimulus_settings(
     Resolve per-user notification stimulus settings from configurations.
     Defaults:
     - type: vibe
-    - value: 100
+    - value: 35
     """
     default_type = "vibe"
-    default_value = 100
+    default_value = 35
     if not user_id:
         return default_type, default_value
 
@@ -174,7 +174,7 @@ def stimulate_notification_for_user(
 
     Config keys:
     - PAVLOK_TYPE_NOTION (default: vibe)
-    - PAVLOK_VALUE_NOTION (default: 100)
+    - PAVLOK_VALUE_NOTION (default: 35)
     """
     own_session = False
     if session is None:
@@ -190,7 +190,7 @@ def stimulate_notification_for_user(
         return {
             "success": False,
             "type": "vibe",
-            "value": 100,
+            "value": 35,
             "error": f"failed to load notification settings: {exc}",
         }
     finally:

@@ -363,7 +363,7 @@ class TestNotificationStimulusConfig:
             reason="plan: 今日のプランを登録してください",
         )
         assert result["success"] is True
-        assert calls == [("vibe", 100, "plan: 今日のプランを登録してください")]
+        assert calls == [("vibe", 35, "plan: 今日のプランを登録してください")]
 
     def test_notification_stimulus_uses_user_config_values(self, tmp_path, monkeypatch):
         db_path = tmp_path / "notification_user_config.sqlite3"
@@ -449,7 +449,7 @@ class TestNotificationStimulusConfig:
                 Configuration(
                     user_id=user_id,
                     key="PAVLOK_VALUE_NOTION",
-                    value="100",
+                    value="35",
                     value_type=ConfigValueType.INT,
                 )
             )

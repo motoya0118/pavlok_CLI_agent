@@ -100,10 +100,15 @@ AUTHORIZED_USERS=U03JBULT484
 | IGNORE_INTERVAL | 900 | ignore検知間隔（秒） |
 | IGNORE_JUDGE_TIME | 3 | ignore判定時間（秒） |
 | IGNORE_MAX_RETRY | 5 | ignore最大再試行回数 |
+| COACH_CHARACTOR | うる星やつらのラムちゃん | agent_callコメント生成時の口調 |
+
+**`.env`で管理する項目（/configでは非表示）:**
+
+| 設定キー | デフォルト | 説明 |
+|---------|-----------|------|
 | TIMEOUT_REMIND | 600 | リマインドタイムアウト（秒） |
 | TIMEOUT_REVIEW | 600 | 振り返りタイムアウト（秒） |
 | RETRY_DELAY | 5 | リトライ遅延（分） |
-| COACH_CHARACTOR | うる星やつらのラムちゃん | agent_callコメント生成時の口調 |
 
 ---
 

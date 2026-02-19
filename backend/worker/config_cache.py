@@ -1,14 +1,17 @@
 """Config Cache Module"""
 import os
 import json
-import time
-from typing import Any, Optional, Dict
+from typing import Any, Dict
 from datetime import datetime, timedelta
 
 
 # Cache storage: {key: (value, expire_time)}
 _config_cache: Dict[str, tuple[Any, datetime]] = {}
 CACHE_TTL = timedelta(seconds=60)  # 60秒キャッシュ
+ENV_ONLY_KEYS = {"TIMEOUT_REMIND", "TIMEOUT_REVIEW", "RETRY_DELAY"}
+ENV_FALLBACK_KEYS = {
+    "RETRY_DELAY": ("RETRY_DELAY", "RETRY_DELAY_MIN"),
+}
 
 
 def _parse_value(value: str, value_type: str) -> Any:
@@ -32,6 +35,39 @@ def _parse_value(value: str, value_type: str) -> Any:
         return json.loads(value)
     else:
         return value
+
+
+def _coerce_env_value(raw: str, default: Any) -> Any:
+    """Coerce env string into the same type as default when possible."""
+    if isinstance(default, bool):
+        return raw.lower() in ("true", "1", "yes", "on")
+    if isinstance(default, int):
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+    if isinstance(default, float):
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return default
+    if isinstance(default, (dict, list)):
+        try:
+            return json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return default
+    return raw
+
+
+def _read_env_raw(key: str) -> str | None:
+    """Read env raw string with optional fallback key aliases."""
+    names = ENV_FALLBACK_KEYS.get(key, (key,))
+    for name in names:
+        raw = os.getenv(name)
+        if raw is None:
+            continue
+        return raw
+    return None
 
 
 def get_config(key: str, default: Any = None, session=None) -> Any:
@@ -58,6 +94,13 @@ def get_config(key: str, default: Any = None, session=None) -> Any:
         # Cache expired, remove
         del _config_cache[key]
 
+    # Env-only operational keys (do not read DB).
+    if key in ENV_ONLY_KEYS:
+        raw = _read_env_raw(key)
+        value = _coerce_env_value(raw, default) if raw is not None else default
+        _config_cache[key] = (value, now + CACHE_TTL)
+        return value
+
     # Try to get from DB if session provided
     if session is not None:
         try:
@@ -74,9 +117,9 @@ def get_config(key: str, default: Any = None, session=None) -> Any:
             pass
 
     # Try environment variable
-    env_value = os.getenv(key)
-    if env_value is not None:
-        value = _parse_value(env_value, "str")
+    raw = _read_env_raw(key)
+    if raw is not None:
+        value = _coerce_env_value(raw, default)
         # Cache with TTL
         _config_cache[key] = (value, now + CACHE_TTL)
         return value

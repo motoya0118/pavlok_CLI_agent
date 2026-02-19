@@ -603,7 +603,7 @@ class BlockKitBuilder:
                 "element": {
                     "type": "plain_text_input",
                     "action_id": "PAVLOK_VALUE_NOTION_input",
-                    "initial_value": config_values.get("PAVLOK_VALUE_NOTION", "100"),
+                    "initial_value": config_values.get("PAVLOK_VALUE_NOTION", "35"),
                     "placeholder": {
                         "type": "plain_text",
                         "text": "0-100の数値"
@@ -721,77 +721,6 @@ class BlockKitBuilder:
                     },
                     "min_length": 1,
                     "max_length": 2
-                }
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "⏱️ タイムアウト設定"
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "TIMEOUT_REMIND",
-                "label": {
-                    "type": "plain_text",
-                    "text": "リマインドタイムアウト (秒)"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "TIMEOUT_REMIND_input",
-                    "initial_value": config_values.get("TIMEOUT_REMIND", "600"),
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "例: 600"
-                    },
-                    "min_length": 1,
-                    "max_length": 5
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "TIMEOUT_REVIEW",
-                "label": {
-                    "type": "plain_text",
-                    "text": "振り返りタイムアウト (秒)"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "TIMEOUT_REVIEW_input",
-                    "initial_value": config_values.get("TIMEOUT_REVIEW", "600"),
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "例: 600"
-                    },
-                    "min_length": 1,
-                    "max_length": 5
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "RETRY_DELAY",
-                "label": {
-                    "type": "plain_text",
-                    "text": "リトライ遅延 (分)"
-                },
-                "element": {
-                    "type": "static_select",
-                    "action_id": "RETRY_DELAY_select",
-                    "initial_option": {
-                        "text": {"type": "plain_text", "text": "5分"},
-                        "value": config_values.get("RETRY_DELAY", "5")
-                    },
-                    "options": [
-                        {"text": {"type": "plain_text", "text": "1分"}, "value": "1"},
-                        {"text": {"type": "plain_text", "text": "3分"}, "value": "3"},
-                        {"text": {"type": "plain_text", "text": "5分"}, "value": "5"},
-                        {"text": {"type": "plain_text", "text": "10分"}, "value": "10"},
-                        {"text": {"type": "plain_text", "text": "15分"}, "value": "15"}
-                    ]
                 }
             },
             {

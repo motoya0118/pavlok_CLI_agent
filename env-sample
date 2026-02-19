@@ -7,14 +7,14 @@ SLACK_USER_OAUTH_TOKEN={YOUR_API_KEY} # Slack User OAuth Token（ユーザー権
 # ===== Agentモード設定 =====
 AGENT_MODE=codex_cli # [codex_cli or gemini_cli]
 
-# ===== ScheduleExecutor設定 =====
-RETRY_DELAY_MIN=5 # エラー後リトライの待機時間（分）
-
 # ===== Slack 設定 =====
 SLACK_CHANNEL={CHANNEL} # 通知を送るSlackチャンネル名またはID
 
 # ===== 時刻・タイムアウト設定 =====
 TIMEZONE=JST # タイムゾーン（例: JST）
+TIMEOUT_REMIND=600 # リマインド応答タイムアウト（秒）
+TIMEOUT_REVIEW=600 # 振り返り応答タイムアウト（秒）
+RETRY_DELAY=5 # エラー後リトライの待機時間（分）
 
 # ===== slack reply設定 =====
 IGNORE_SPAN=900 # 無視1回の定義（秒）
@@ -28,9 +28,9 @@ PAVLOK_VALUE_REMIND=100 # リマインド時のPavlok強度
 PAVLOK_TYPE_PUNISH=zap # 罰のPavlokモード（beep/vibe/zap など）
 PAVLOK_VALUE_PUNISH=35 # 罰のPavlok強度
 PAVLOK_TYPE_NOTION=vibe # 通知時のPavlokモード（beep/vibe/zap）
-PAVLOK_VALUE_NOTION=100 # 通知時のPavlok強度（0-100）
+PAVLOK_VALUE_NOTION=35 # 通知時のPavlok強度（0-100）
 PUNISH_INTERVAL_SEC=5 # 罰の実行間隔（秒）
 
 # ===== 安全上限・制限 =====
-LIMIT_DAY_PAVLOK_COUNTS=10 # 1日に実行できるPavlok回数の上限
+LIMIT_DAY_PAVLOK_COUNTS=100 # 1日に実行できるPavlok回数の上限
 LIMIT_PAVLOK_ZAP_VALUE=100 # zap強度の上限

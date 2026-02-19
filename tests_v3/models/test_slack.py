@@ -151,7 +151,7 @@ class TestBlockKitBuilder:
             "PAVLOK_TYPE_PUNISH": "zap",
             "PAVLOK_VALUE_PUNISH": "50",
             "PAVLOK_TYPE_NOTION": "vibe",
-            "PAVLOK_VALUE_NOTION": "100",
+            "PAVLOK_VALUE_NOTION": "35",
             "IGNORE_INTERVAL": "900",
             "COACH_CHARACTOR": "ラムちゃん",
         }

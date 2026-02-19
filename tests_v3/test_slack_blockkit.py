@@ -119,15 +119,12 @@ class TestBlockKitConfig:
             "PAVLOK_TYPE_PUNISH": "zap",
             "PAVLOK_VALUE_PUNISH": "50",
             "PAVLOK_TYPE_NOTION": "vibe",
-            "PAVLOK_VALUE_NOTION": "100",
+            "PAVLOK_VALUE_NOTION": "35",
             "LIMIT_DAY_PAVLOK_COUNTS": "100",
             "LIMIT_PAVLOK_ZAP_VALUE": "100",
             "IGNORE_INTERVAL": "900",
             "IGNORE_JUDGE_TIME": "3",
             "IGNORE_MAX_RETRY": "5",
-            "TIMEOUT_REMIND": "600",
-            "TIMEOUT_REVIEW": "600",
-            "RETRY_DELAY": "5",
         }
 
         modal = config_modal(config_values)
@@ -136,7 +133,7 @@ class TestBlockKitConfig:
         assert modal["callback_id"] == "config_submit"
         assert "⚙️" in modal["title"]["text"]
 
-        # Should have section headers for 罰, Ignore, Timeout
+        # Should have section headers for 罰, Ignore, Coach
         headers = [b for b in modal["blocks"] if b.get("type") == "header"]
         assert len(headers) >= 3
 
@@ -145,6 +142,10 @@ class TestBlockKitConfig:
             None,
         )
         assert coach_block is not None
+        assert not any(
+            b.get("block_id") in {"TIMEOUT_REMIND", "TIMEOUT_REVIEW", "RETRY_DELAY"}
+            for b in modal["blocks"]
+        )
 
     def test_config_modal_punishment_values(self):
         """Punishment config should have correct initial values"""
@@ -209,7 +210,7 @@ class TestBlockKitConfig:
             None,
         )
         assert notion_value_block is not None
-        assert notion_value_block["element"]["initial_value"] == "100"
+        assert notion_value_block["element"]["initial_value"] == "35"
 
         actions_blocks = [b for b in modal["blocks"] if b.get("type") == "actions"]
         assert len(actions_blocks) >= 1

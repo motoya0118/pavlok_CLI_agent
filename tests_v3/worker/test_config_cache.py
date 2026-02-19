@@ -121,3 +121,25 @@ class TestConfigCache:
             value_type="json"
         )
         assert get_config("JSON_CONFIG", session=v3_db_session) == {"key": "value"}
+
+    @pytest.mark.asyncio
+    async def test_env_only_timeout_remind_ignores_db(self, v3_db_session, v3_test_data_factory):
+        """TIMEOUT_REMINDはDBより.env値を優先すること"""
+        v3_test_data_factory.create_configuration(
+            key="TIMEOUT_REMIND",
+            value="1200",
+            value_type="int",
+        )
+        invalidate_config_cache("TIMEOUT_REMIND")
+
+        with patch.dict("os.environ", {"TIMEOUT_REMIND": "600"}):
+            result = get_config("TIMEOUT_REMIND", 600, session=v3_db_session)
+            assert result == 600
+
+    @pytest.mark.asyncio
+    async def test_retry_delay_env_fallback_key(self):
+        """RETRY_DELAY未設定時はRETRY_DELAY_MINを後方互換で参照すること"""
+        invalidate_config_cache("RETRY_DELAY")
+        with patch.dict("os.environ", {"RETRY_DELAY_MIN": "7"}, clear=True):
+            result = get_config("RETRY_DELAY", 5)
+            assert result == 7
