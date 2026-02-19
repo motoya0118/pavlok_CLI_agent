@@ -433,6 +433,99 @@ async def process_base_commit(request) -> Dict[str, Any]:
     }
 
 
+async def process_plan(request) -> Dict[str, Any]:
+    """
+    plan編集コマンド処理
+
+    Args:
+        request: FastAPIリクエスト
+
+    Returns:
+        Dict[str, Any]: 処理結果
+    """
+    from backend.slack_ui import plan_input_modal
+
+    request_map = request if isinstance(request, Mapping) else {}
+    user_id = request_map.get("user_id", "")
+    channel_id = request_map.get("channel_id", "")
+    response_url = request_map.get("response_url", "")
+    trigger_id = request_map.get("trigger_id", "")
+
+    if not isinstance(user_id, str):
+        user_id = ""
+    if not isinstance(channel_id, str):
+        channel_id = ""
+    if not isinstance(response_url, str):
+        response_url = ""
+    if not isinstance(trigger_id, str):
+        trigger_id = ""
+
+    commitments: list[dict[str, str]] = []
+    if user_id:
+        commitments = _load_existing_commitments(user_id)
+
+    modal_data = plan_input_modal(commitments)
+    private_metadata: dict[str, str] = {}
+    if channel_id:
+        private_metadata["channel_id"] = channel_id
+    if user_id:
+        private_metadata["user_id"] = user_id
+    if response_url:
+        private_metadata["response_url"] = response_url
+    if private_metadata:
+        modal_data["private_metadata"] = json.dumps(private_metadata, ensure_ascii=False)
+
+    if trigger_id:
+        ok, reason = await asyncio.to_thread(_open_slack_modal, trigger_id, modal_data)
+        if ok:
+            print(f"[{datetime.now()}] plan views.open succeeded")
+            return {
+                "status": "success",
+                "response_type": "ephemeral",
+                "text": "今日の予定モーダルを開きました。",
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "📅 今日の予定モーダルを開きました。",
+                        },
+                    }
+                ],
+            }
+
+        return {
+            "status": "success",
+            "response_type": "ephemeral",
+            "text": f"モーダルを開けませんでした: {reason}",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f":warning: モーダルを開けませんでした: {reason}",
+                    },
+                }
+            ],
+        }
+
+    print(f"[{datetime.now()}] plan views.open skipped: missing trigger_id")
+    return {
+        "status": "success",
+        "response_type": "ephemeral",
+        "text": "trigger_id が取得できないためモーダルを開けませんでした。再実行してください。",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ":warning: trigger_id が取得できないためモーダルを開けませんでした。再実行してください。",
+                },
+            }
+        ],
+    }
+
+
 async def process_stop(request) -> Dict[str, Any]:
     """
     停止コマンド処理

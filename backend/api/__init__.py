@@ -1,7 +1,7 @@
 """Backend API Package Init"""
 from .signature import verify_slack_signature
 from .internal_protection import verify_internal_request
-from .command import process_base_commit, process_stop, process_restart, process_config
+from .command import process_base_commit, process_plan, process_stop, process_restart, process_config
 from .config import get_configurations, upsert_configuration, reset_configuration
 from .interactive import (
     process_plan_submit,

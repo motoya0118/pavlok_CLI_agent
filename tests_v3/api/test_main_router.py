@@ -1,6 +1,29 @@
 import pytest
 
-from backend.main import route_interactive_payload
+from backend.main import route_interactive_payload, route_slash_command
+
+
+@pytest.mark.asyncio
+async def test_route_slash_command_plan(monkeypatch):
+    form_data = {
+        "command": "/plan",
+        "user_id": "U03JBULT484",
+    }
+    called = {}
+
+    async def _fake_process_plan(received_form_data):
+        called["form_data"] = received_form_data
+        return {"status": "success"}
+
+    monkeypatch.setattr(
+        "backend.main.process_plan",
+        _fake_process_plan,
+    )
+
+    result = await route_slash_command(form_data)
+
+    assert result == {"status": "success"}
+    assert called["form_data"] == form_data
 
 
 @pytest.mark.asyncio
