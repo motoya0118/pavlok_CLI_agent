@@ -98,8 +98,8 @@ ensure_uv() {
 }
 
 sync_dependencies() {
-  log "依存関係を同期します (uv sync)。"
-  run_as_service_user "cd '$APP_DIR' && '$UV_BIN' sync"
+  log "依存関係を同期します (uv sync --extra dev)。"
+  run_as_service_user "cd '$APP_DIR' && '$UV_BIN' sync --extra dev"
 }
 
 run_migration() {
@@ -245,4 +245,3 @@ main() {
 }
 
 main "$@"
-
