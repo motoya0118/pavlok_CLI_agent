@@ -242,11 +242,19 @@ class TestBlockKitPlan:
         from backend.slack_ui import plan_start_notification
 
         schedule_id = "123"
-        blocks = plan_start_notification(schedule_id)
+        user_id = "U03JBULT484"
+        blocks = plan_start_notification(schedule_id, user_id=user_id)
 
         assert isinstance(blocks, list)
         assert blocks[0]["type"] == "header"
         assert "📅" in blocks[0]["text"]["text"]
+
+        mention_sections = [
+            b for b in blocks
+            if b.get("type") == "section"
+            and b.get("text", {}).get("text") == f"<@{user_id}>"
+        ]
+        assert len(mention_sections) == 1
 
         # Should have button to open modal
         actions = [b for b in blocks if b.get("type") == "actions"]

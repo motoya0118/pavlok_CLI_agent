@@ -9,7 +9,11 @@ class TestBlockKitBuilder:
 
     def test_plan_open_notification_blocks(self):
         """Test plan open notification blocks generation"""
-        blocks = BlockKitBuilder.plan_open_notification(schedule_id="test-schedule-123")
+        user_id = "U03JBULT484"
+        blocks = BlockKitBuilder.plan_open_notification(
+            schedule_id="test-schedule-123",
+            user_id=user_id,
+        )
 
         assert isinstance(blocks, list)
         assert len(blocks) >= 3  # header, section, actions, context
@@ -18,6 +22,13 @@ class TestBlockKitBuilder:
         header = blocks[0]
         assert header["type"] == "header"
         assert header["text"]["text"] == "📅 今日の予定を登録しましょう"
+
+        mention_sections = [
+            b for b in blocks
+            if b.get("type") == "section"
+            and b.get("text", {}).get("text") == f"<@{user_id}>"
+        ]
+        assert len(mention_sections) == 1
 
         # Check actions block with trigger button
         actions = [b for b in blocks if b.get("type") == "actions"]

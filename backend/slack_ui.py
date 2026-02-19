@@ -645,9 +645,9 @@ def audit_log_display(audit_logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # Plan Event UI
 # ============================================================================
 
-def plan_start_notification(schedule_id: str) -> list[dict[str, Any]]:
+def plan_start_notification(schedule_id: str, user_id: str = "") -> list[dict[str, Any]]:
     """Generate plan start notification blocks"""
-    return [
+    blocks: list[dict[str, Any]] = [
         {
             "type": "header",
             "text": {
@@ -662,6 +662,21 @@ def plan_start_notification(schedule_id: str) -> list[dict[str, Any]]:
                 "text": "おはようございます！今日の計画を立てましょう。\n以下のボタンをクリックして予定を登録してください。",
             },
         },
+    ]
+
+    if user_id:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"<@{user_id}>",
+                },
+            }
+        )
+
+    blocks.extend(
+        [
         {
             "type": "actions",
             "block_id": "plan_trigger",
@@ -688,6 +703,8 @@ def plan_start_notification(schedule_id: str) -> list[dict[str, Any]]:
             ],
         },
     ]
+    )
+    return blocks
 
 
 def _plan_task_blocks(index: int, commitment: dict[str, Any]) -> list[dict[str, Any]]:

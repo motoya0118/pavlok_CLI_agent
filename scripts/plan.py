@@ -70,7 +70,10 @@ def main():
 
         # Post plan open notification
         token = slack.require_bot_token()
-        blocks = BlockKitBuilder.plan_open_notification(schedule_id)
+        blocks = BlockKitBuilder.plan_open_notification(
+            schedule_id=schedule_id,
+            user_id=str(schedule.user_id),
+        )
 
         response = slack.post_message(blocks, channel, token)
 

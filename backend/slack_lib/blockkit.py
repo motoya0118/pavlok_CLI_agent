@@ -16,9 +16,9 @@ class BlockKitBuilder:
     # ============================================================================
 
     @staticmethod
-    def plan_open_notification(schedule_id: str) -> list[dict[str, Any]]:
+    def plan_open_notification(schedule_id: str, user_id: str = "") -> list[dict[str, Any]]:
         """planイベント開始通知（パブリック）"""
-        return [
+        blocks: list[dict[str, Any]] = [
             {
                 "type": "header",
                 "text": {
@@ -26,6 +26,21 @@ class BlockKitBuilder:
                     "text": "📅 今日の予定を登録しましょう"
                 }
             },
+        ]
+
+        if user_id:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"<@{user_id}>",
+                    },
+                }
+            )
+
+        blocks.extend(
+            [
             {
                 "type": "section",
                 "text": {
@@ -54,11 +69,13 @@ class BlockKitBuilder:
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": "⏰ 応答がない場合、15分後に催促が始まります"
+                    "text": "⏰ 応答がない場合、15分後に催促が始まります"
                     }
                 ]
             }
         ]
+        )
+        return blocks
 
     @staticmethod
     def plan_submit_confirmation(
