@@ -102,7 +102,12 @@ def main():
             ignore_interval_minutes=ignore_interval_minutes,
         )
 
-        response = slack.post_message(blocks, channel, token)
+        response = slack.post_message(
+            blocks,
+            channel,
+            token,
+            user_id=str(schedule.user_id),
+        )
 
         # Save thread_ts for later updates
         thread_ts = response.json().get("message", {}).get("ts")

@@ -27,6 +27,8 @@ PAVLOK_VALUE_REMIND=100 # リマインド時のPavlok強度
 # ===== Pavlok 罰設定 =====
 PAVLOK_TYPE_PUNISH=zap # 罰のPavlokモード（beep/vibe/zap など）
 PAVLOK_VALUE_PUNISH=35 # 罰のPavlok強度
+PAVLOK_TYPE_NOTION=vibe # 通知時のPavlokモード（beep/vibe/zap）
+PAVLOK_VALUE_NOTION=100 # 通知時のPavlok強度（0-100）
 PUNISH_INTERVAL_SEC=5 # 罰の実行間隔（秒）
 
 # ===== 安全上限・制限 =====

@@ -563,6 +563,59 @@ class BlockKitBuilder:
                 }
             },
             {
+                "type": "divider"
+            },
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🔔 通知設定"
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "PAVLOK_TYPE_NOTION",
+                "label": {
+                    "type": "plain_text",
+                    "text": "通知時のPavlokタイプ"
+                },
+                "element": {
+                    "type": "static_select",
+                    "action_id": "PAVLOK_TYPE_NOTION_select",
+                    "initial_option": {
+                        "text": {"type": "plain_text", "text": "📳 vibe (振動)"},
+                        "value": "vibe"
+                    },
+                    "options": [
+                        {"text": {"type": "plain_text", "text": "⚡ zap (電気ショック)"}, "value": "zap"},
+                        {"text": {"type": "plain_text", "text": "📳 vibe (振動)"}, "value": "vibe"},
+                        {"text": {"type": "plain_text", "text": "🔊 beep (音)"}, "value": "beep"}
+                    ]
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "PAVLOK_VALUE_NOTION",
+                "label": {
+                    "type": "plain_text",
+                    "text": "通知時のPavlok強度 (0-100)"
+                },
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "PAVLOK_VALUE_NOTION_input",
+                    "initial_value": config_values.get("PAVLOK_VALUE_NOTION", "100"),
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "0-100の数値"
+                    },
+                    "min_length": 1,
+                    "max_length": 3
+                }
+            },
+            {
+                "type": "divider"
+            },
+            {
                 "type": "input",
                 "block_id": "LIMIT_DAY_PAVLOK_COUNTS",
                 "label": {

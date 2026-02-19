@@ -31,6 +31,7 @@ def post_message(
     channel: str,
     token: str,
     text: str = "notification",
+    user_id: str = "",
 ):
     """Post a Block Kit message to Slack and validate response."""
     response = requests.post(
@@ -58,5 +59,27 @@ def post_message(
 
     if not payload.get("ok"):
         raise RuntimeError(f"chat.postMessage failed: {payload.get('error')}")
+
+    if user_id:
+        try:
+            from backend.pavlok_lib import stimulate_notification_for_user
+
+            pavlok_result = stimulate_notification_for_user(user_id=user_id)
+            if isinstance(pavlok_result, dict) and pavlok_result.get("success"):
+                print(
+                    "notification stimulus sent: "
+                    f"user_id={user_id} "
+                    f"type={pavlok_result.get('type')} value={pavlok_result.get('value')}"
+                )
+            else:
+                print(
+                    "notification stimulus failed: "
+                    f"user_id={user_id} detail={pavlok_result}"
+                )
+        except Exception as exc:
+            print(
+                "notification stimulus failed: "
+                f"user_id={user_id} detail={exc}"
+            )
 
     return response

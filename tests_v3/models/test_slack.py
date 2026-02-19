@@ -150,6 +150,8 @@ class TestBlockKitBuilder:
         config_values = {
             "PAVLOK_TYPE_PUNISH": "zap",
             "PAVLOK_VALUE_PUNISH": "50",
+            "PAVLOK_TYPE_NOTION": "vibe",
+            "PAVLOK_VALUE_NOTION": "100",
             "IGNORE_INTERVAL": "900",
             "COACH_CHARACTOR": "ラムちゃん",
         }
@@ -173,6 +175,11 @@ class TestBlockKitBuilder:
         )
         assert coach_block is not None
         assert coach_block["element"]["initial_value"] == "ラムちゃん"
+        notion_block = next(
+            (b for b in blocks if b.get("block_id") == "PAVLOK_TYPE_NOTION"),
+            None,
+        )
+        assert notion_block is not None
 
     def test_stop_notification_ephemeral(self):
         """Test stop command ephemeral notification"""

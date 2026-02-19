@@ -27,6 +27,17 @@ CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
         "allowed": {"zap", "vibe", "beep"},
     },
     "PAVLOK_VALUE_PUNISH": {"default": "35", "value_type": ConfigValueType.INT},
+    "PAVLOK_TYPE_NOTION": {
+        "default": "vibe",
+        "value_type": ConfigValueType.STR,
+        "allowed": {"zap", "vibe", "beep"},
+    },
+    "PAVLOK_VALUE_NOTION": {
+        "default": "100",
+        "value_type": ConfigValueType.INT,
+        "min": 0,
+        "max": 100,
+    },
     "LIMIT_DAY_PAVLOK_COUNTS": {"default": "100", "value_type": ConfigValueType.INT},
     "LIMIT_PAVLOK_ZAP_VALUE": {"default": "100", "value_type": ConfigValueType.INT},
     "IGNORE_INTERVAL": {"default": "900", "value_type": ConfigValueType.INT},
@@ -202,9 +213,17 @@ def _extract_config_updates_from_view(
 
         if definition["value_type"] == ConfigValueType.INT:
             try:
-                int(raw_value)
+                parsed_int = int(raw_value)
             except ValueError:
                 errors[key] = "数値で入力してください。"
+                continue
+            min_value = definition.get("min")
+            max_value = definition.get("max")
+            if isinstance(min_value, int) and parsed_int < min_value:
+                errors[key] = f"{min_value}以上で入力してください。"
+                continue
+            if isinstance(max_value, int) and parsed_int > max_value:
+                errors[key] = f"{max_value}以下で入力してください。"
                 continue
 
         if key == "COACH_CHARACTOR" and len(raw_value) > 100:

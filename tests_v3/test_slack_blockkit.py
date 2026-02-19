@@ -118,6 +118,8 @@ class TestBlockKitConfig:
         config_values = {
             "PAVLOK_TYPE_PUNISH": "zap",
             "PAVLOK_VALUE_PUNISH": "50",
+            "PAVLOK_TYPE_NOTION": "vibe",
+            "PAVLOK_VALUE_NOTION": "100",
             "LIMIT_DAY_PAVLOK_COUNTS": "100",
             "LIMIT_PAVLOK_ZAP_VALUE": "100",
             "IGNORE_INTERVAL": "900",
@@ -151,6 +153,8 @@ class TestBlockKitConfig:
         config_values = {
             "PAVLOK_TYPE_PUNISH": "vibe",
             "PAVLOK_VALUE_PUNISH": "70",
+            "PAVLOK_TYPE_NOTION": "beep",
+            "PAVLOK_VALUE_NOTION": "80",
         }
 
         modal = config_modal(config_values)
@@ -174,6 +178,21 @@ class TestBlockKitConfig:
         assert value_block is not None
         assert value_block["element"]["initial_value"] == "70"
 
+        notion_type_block = next(
+            (b for b in blocks if b.get("block_id") == "PAVLOK_TYPE_NOTION"),
+            None
+        )
+        assert notion_type_block is not None
+        assert notion_type_block["element"]["action_id"] == "PAVLOK_TYPE_NOTION_select"
+        assert notion_type_block["element"]["initial_option"]["value"] == "beep"
+
+        notion_value_block = next(
+            (b for b in blocks if b.get("block_id") == "PAVLOK_VALUE_NOTION"),
+            None
+        )
+        assert notion_value_block is not None
+        assert notion_value_block["element"]["initial_value"] == "80"
+
     def test_config_modal_reset_and_history_buttons(self):
         """Config modal should have reset and history buttons"""
         from backend.slack_ui import config_modal
@@ -185,6 +204,12 @@ class TestBlockKitConfig:
         )
         assert value_block is not None
         assert value_block["element"]["initial_value"] == "35"
+        notion_value_block = next(
+            (b for b in modal["blocks"] if b.get("block_id") == "PAVLOK_VALUE_NOTION"),
+            None,
+        )
+        assert notion_value_block is not None
+        assert notion_value_block["element"]["initial_value"] == "100"
 
         actions_blocks = [b for b in modal["blocks"] if b.get("type") == "actions"]
         assert len(actions_blocks) >= 1

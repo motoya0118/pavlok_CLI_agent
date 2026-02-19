@@ -7,6 +7,137 @@ https://pavlok-eu.readme.io/docs/api_reference.html
 import os
 from typing import Any
 import requests
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+
+_SESSION_FACTORY = None
+_SESSION_DB_URL = None
+
+
+def _get_session():
+    """Create DB session using current DATABASE_URL."""
+    global _SESSION_FACTORY, _SESSION_DB_URL
+    database_url = os.getenv("DATABASE_URL", "sqlite:///./oni.db")
+
+    if _SESSION_FACTORY is None or _SESSION_DB_URL != database_url:
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False} if "sqlite" in database_url else {},
+        )
+        _SESSION_FACTORY = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=engine,
+        )
+        _SESSION_DB_URL = database_url
+
+    return _SESSION_FACTORY()
+
+
+def _safe_int(value: Any, default: int) -> int:
+    """Best-effort int parse with fallback."""
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _load_notification_stimulus_settings(
+    user_id: str,
+    session,
+) -> tuple[str, int]:
+    """
+    Resolve per-user notification stimulus settings from configurations.
+    Defaults:
+    - type: vibe
+    - value: 100
+    """
+    default_type = "vibe"
+    default_value = 100
+    if not user_id:
+        return default_type, default_value
+
+    from backend.models import Configuration
+
+    rows = (
+        session.query(Configuration.key, Configuration.value)
+        .filter(
+            Configuration.user_id == user_id,
+            Configuration.key.in_(["PAVLOK_TYPE_NOTION", "PAVLOK_VALUE_NOTION"]),
+        )
+        .all()
+    )
+    config_map = {str(k): str(v) for k, v in rows}
+
+    stimulus_type = config_map.get("PAVLOK_TYPE_NOTION", default_type).strip().lower()
+    if stimulus_type not in PavlokClient.VALID_STIMULUS_TYPES:
+        stimulus_type = default_type
+
+    stimulus_value = _safe_int(config_map.get("PAVLOK_VALUE_NOTION", default_value), default_value)
+    if stimulus_value < 0:
+        stimulus_value = 0
+    if stimulus_value > 100:
+        stimulus_value = 100
+
+    return stimulus_type, stimulus_value
+
+
+def stimulate_notification_for_user(
+    user_id: str,
+    *,
+    session=None,
+    api_key: str | None = None,
+    api_base: str | None = None,
+    http_client: Any = None,
+) -> dict[str, Any]:
+    """
+    Send notification Pavlok stimulus using per-user config values.
+
+    Config keys:
+    - PAVLOK_TYPE_NOTION (default: vibe)
+    - PAVLOK_VALUE_NOTION (default: 100)
+    """
+    own_session = False
+    if session is None:
+        session = _get_session()
+        own_session = True
+
+    try:
+        stimulus_type, stimulus_value = _load_notification_stimulus_settings(
+            user_id=user_id,
+            session=session,
+        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "type": "vibe",
+            "value": 100,
+            "error": f"failed to load notification settings: {exc}",
+        }
+    finally:
+        if own_session:
+            session.close()
+
+    try:
+        client = PavlokClient(
+            api_key=api_key,
+            api_base=api_base,
+            http_client=http_client,
+        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "type": stimulus_type,
+            "value": stimulus_value,
+            "error": str(exc),
+        }
+
+    result = client.stimulate(stimulus_type=stimulus_type, value=stimulus_value)
+    if isinstance(result, dict):
+        result.setdefault("type", stimulus_type)
+        result.setdefault("value", stimulus_value)
+    return result
 
 
 class PavlokClient:

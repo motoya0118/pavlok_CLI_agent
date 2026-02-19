@@ -219,6 +219,7 @@ def restart_notification() -> list[dict[str, Any]]:
 def _punishment_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
     """Generate punishment configuration section"""
     current_type = config_values.get("PAVLOK_TYPE_PUNISH", "zap")
+    current_notion_type = config_values.get("PAVLOK_TYPE_NOTION", "vibe")
     type_options = [
         {"text": {"type": "plain_text", "text": "⚡ zap (電気ショック)"}, "value": "zap"},
         {"text": {"type": "plain_text", "text": "📳 vibe (振動)"}, "value": "vibe"},
@@ -230,6 +231,11 @@ def _punishment_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
     for opt in type_options:
         if opt["value"] == current_type:
             initial_option = opt
+            break
+    notion_initial_option = None
+    for opt in type_options:
+        if opt["value"] == current_notion_type:
+            notion_initial_option = opt
             break
 
     return [
@@ -276,6 +282,52 @@ def _punishment_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
                 "type": "plain_text",
                 "text": ":warning: 80以上は非常に強力です。十分に注意してください。",
             },
+        },
+        {
+            "type": "divider",
+        },
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "🔔 通知設定",
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "PAVLOK_TYPE_NOTION",
+            "label": {
+                "type": "plain_text",
+                "text": "通知時のPavlokタイプ",
+            },
+            "element": {
+                "type": "static_select",
+                "action_id": "PAVLOK_TYPE_NOTION_select",
+                "initial_option": notion_initial_option or type_options[1],
+                "options": type_options,
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "PAVLOK_VALUE_NOTION",
+            "label": {
+                "type": "plain_text",
+                "text": "通知時のPavlok強度 (0-100)",
+            },
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "PAVLOK_VALUE_NOTION_input",
+                "initial_value": config_values.get("PAVLOK_VALUE_NOTION", "100"),
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "0-100の数値",
+                },
+                "min_length": 1,
+                "max_length": 3,
+            },
+        },
+        {
+            "type": "divider",
         },
         {
             "type": "input",

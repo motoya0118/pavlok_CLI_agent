@@ -1,6 +1,10 @@
 # v0.3 Pavlok Client Tests (TDD)
 import pytest
-from backend.pavlok_lib import PavlokClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from backend.models import Base, Configuration, ConfigValueType
+from backend.pavlok_lib import PavlokClient, stimulate_notification_for_user
 
 
 class TestPavlokClientValidation:
@@ -282,6 +286,89 @@ class TestPavlokClientWithMock:
 
         assert status["success"] is False
         assert "error" in status
+
+
+class TestNotificationStimulusConfig:
+    """Test DB-backed notification stimulus helper."""
+
+    def test_notification_stimulus_uses_defaults_when_config_missing(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "notification_defaults.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        engine = create_engine(database_url, connect_args={"check_same_thread": False})
+        Base.metadata.create_all(bind=engine)
+
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.pavlok_lib.client._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.pavlok_lib.client._SESSION_DB_URL", None)
+
+        calls: list[tuple[str, int]] = []
+
+        class _FakePavlokClient:
+            VALID_STIMULUS_TYPES = ("zap", "beep", "vibe")
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def stimulate(self, stimulus_type: str, value: int):
+                calls.append((stimulus_type, value))
+                return {"success": True, "type": stimulus_type, "value": value}
+
+        monkeypatch.setattr("backend.pavlok_lib.client.PavlokClient", _FakePavlokClient)
+
+        result = stimulate_notification_for_user(user_id="U_TEST")
+        assert result["success"] is True
+        assert calls == [("vibe", 100)]
+
+    def test_notification_stimulus_uses_user_config_values(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "notification_user_config.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        engine = create_engine(database_url, connect_args={"check_same_thread": False})
+        Base.metadata.create_all(bind=engine)
+        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+        session = Session()
+        try:
+            session.add_all(
+                [
+                    Configuration(
+                        user_id="U_TEST",
+                        key="PAVLOK_TYPE_NOTION",
+                        value="beep",
+                        value_type=ConfigValueType.STR,
+                    ),
+                    Configuration(
+                        user_id="U_TEST",
+                        key="PAVLOK_VALUE_NOTION",
+                        value="80",
+                        value_type=ConfigValueType.INT,
+                    ),
+                ]
+            )
+            session.commit()
+        finally:
+            session.close()
+
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.pavlok_lib.client._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.pavlok_lib.client._SESSION_DB_URL", None)
+
+        calls: list[tuple[str, int]] = []
+
+        class _FakePavlokClient:
+            VALID_STIMULUS_TYPES = ("zap", "beep", "vibe")
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def stimulate(self, stimulus_type: str, value: int):
+                calls.append((stimulus_type, value))
+                return {"success": True, "type": stimulus_type, "value": value}
+
+        monkeypatch.setattr("backend.pavlok_lib.client.PavlokClient", _FakePavlokClient)
+
+        result = stimulate_notification_for_user(user_id="U_TEST")
+        assert result["success"] is True
+        assert calls == [("beep", 80)]
 
 
 class TestMockPavlokClientFixture:

@@ -346,3 +346,79 @@ class TestCommandApi:
             assert row.value == "ラムちゃん"
         finally:
             session.close()
+
+    @pytest.mark.asyncio
+    async def test_config_submit_saves_notification_pavlok_settings(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "config_submit_notion.db"
+        database_url = f"sqlite:///{db_path}"
+        engine = create_engine(database_url, connect_args={"check_same_thread": False})
+        Base.metadata.create_all(bind=engine)
+        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.command._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.command._SESSION_DB_URL", None)
+
+        payload = {
+            "type": "view_submission",
+            "user": {"id": "U_TEST"},
+            "view": {
+                "callback_id": "config_submit",
+                "state": {
+                    "values": {
+                        "PAVLOK_TYPE_NOTION": {
+                            "PAVLOK_TYPE_NOTION_select": {
+                                "type": "static_select",
+                                "selected_option": {"value": "beep"},
+                            }
+                        },
+                        "PAVLOK_VALUE_NOTION": {
+                            "PAVLOK_VALUE_NOTION_input": {
+                                "type": "plain_text_input",
+                                "value": "80",
+                            }
+                        },
+                    }
+                },
+            },
+        }
+
+        result = await process_config(payload)
+        assert result["response_action"] == "clear"
+
+        session = Session()
+        try:
+            rows = (
+                session.query(Configuration)
+                .filter(Configuration.user_id == "U_TEST")
+                .all()
+            )
+            config_map = {row.key: row.value for row in rows}
+            assert config_map["PAVLOK_TYPE_NOTION"] == "beep"
+            assert config_map["PAVLOK_VALUE_NOTION"] == "80"
+        finally:
+            session.close()
+
+    @pytest.mark.asyncio
+    async def test_config_submit_rejects_notification_value_out_of_range(self):
+        payload = {
+            "type": "view_submission",
+            "user": {"id": "U_TEST"},
+            "view": {
+                "callback_id": "config_submit",
+                "state": {
+                    "values": {
+                        "PAVLOK_VALUE_NOTION": {
+                            "PAVLOK_VALUE_NOTION_input": {
+                                "type": "plain_text_input",
+                                "value": "101",
+                            }
+                        }
+                    }
+                },
+            },
+        }
+
+        result = await process_config(payload)
+        assert result["response_action"] == "errors"
+        assert result["errors"]["PAVLOK_VALUE_NOTION"] == "100以下で入力してください。"

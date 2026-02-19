@@ -378,8 +378,40 @@ async def _notify_plan_saved(
             f"[{datetime.now()}] plan-submit notification sent: "
             f"user_id={user_id} channel={channel_id or '(dm)'} tasks={len(scheduled_tasks)}"
         )
+        await _send_notification_stimulus(
+            user_id=user_id,
+            source="plan-submit",
+        )
     else:
         print(f"[{datetime.now()}] plan-submit notification failed: {reason}")
+
+
+async def _send_notification_stimulus(
+    user_id: str,
+    source: str,
+) -> None:
+    """Send per-user Pavlok stimulus for Slack notification events."""
+    if not user_id:
+        return
+
+    def _send() -> dict[str, Any]:
+        from backend.pavlok_lib import stimulate_notification_for_user
+
+        result = stimulate_notification_for_user(user_id=user_id)
+        return result if isinstance(result, dict) else {"success": False, "error": str(result)}
+
+    result = await asyncio.to_thread(_send)
+    if result.get("success"):
+        print(
+            f"[{datetime.now()}] notification-stimulus sent: "
+            f"user_id={user_id} source={source} "
+            f"type={result.get('type')} value={result.get('value')}"
+        )
+    else:
+        print(
+            f"[{datetime.now()}] notification-stimulus failed: "
+            f"user_id={user_id} source={source} detail={result}"
+        )
 
 
 async def _run_agent_call(schedule_ids: list[str]) -> None:
@@ -1484,6 +1516,10 @@ async def _notify_remind_result(
         print(
             f"[{datetime.now()}] remind-result notification sent: "
             f"user_id={user_id} channel={channel_id} thread_ts={thread_ts or '-'}"
+        )
+        await _send_notification_stimulus(
+            user_id=user_id,
+            source="remind-result",
         )
     else:
         print(f"[{datetime.now()}] remind-result notification failed: {reason}")
