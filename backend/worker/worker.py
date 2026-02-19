@@ -147,10 +147,10 @@ class PunishmentWorker:
 
     async def fetch_processing_plan_schedules(self) -> List:
         """
-        監視対象候補のprocessing planを取得する
+        監視対象候補のprocessing scheduleを取得する
 
         Returns:
-            processingかつplanかつrun_at <= nowのスケジュールリスト
+            processingかつ(plan/remind)かつrun_at <= nowのスケジュールリスト
         """
         from backend.models import Schedule, ScheduleState, EventType
 
@@ -159,7 +159,7 @@ class PunishmentWorker:
             self.session.query(Schedule)
             .filter(
                 Schedule.state == ScheduleState.PROCESSING,
-                Schedule.event_type == EventType.PLAN,
+                Schedule.event_type.in_([EventType.PLAN, EventType.REMIND]),
                 Schedule.run_at <= now,
             )
             .all()
@@ -273,10 +273,8 @@ class PunishmentWorker:
             elif schedule.event_type == EventType.REMIND:
                 await self.execute_script("remind.py", schedule)
 
-            # For plan, keep processing until user submits response.
-            # For remind, keep current behavior and mark done after notification.
-            if schedule.event_type == EventType.REMIND:
-                schedule.state = ScheduleState.DONE
+            # Keep processing until user responds from Slack (YES/NO).
+            # This applies to both plan and remind.
             self.session.commit()
 
         except Exception as e:
@@ -296,7 +294,7 @@ class PunishmentWorker:
 
     async def monitor_processing_schedules(self) -> None:
         """
-        processing状態のplanを監視してignoreを検知する
+        processing状態のplan/remindを監視してignoreを検知する
         """
         from backend.worker.ignore_mode import detect_ignore_mode
 

@@ -108,16 +108,25 @@ def detect_ignore_mode(session: Session, schedule) -> Dict[str, Any]:
     Returns:
         {"detected": bool, "ignore_time": int}
     """
-    from backend.models import Punishment, PunishmentMode
+    from backend.models import Punishment, PunishmentMode, ScheduleState
     from backend.worker.config_cache import get_config
 
     now = datetime.now()
-    if isinstance(schedule.run_at, datetime):
-        elapsed_seconds = int((now - schedule.run_at).total_seconds())
-    else:
-        elapsed_seconds = int(now.timestamp() - schedule.run_at)
 
-    config_interval = _safe_int(get_config("IGNORE_INTERVAL", 900), 900)
+    # Use processing start time as ignore timer origin.
+    reference_time = schedule.run_at
+    if (
+        getattr(schedule, "state", None) == ScheduleState.PROCESSING
+        and isinstance(getattr(schedule, "updated_at", None), datetime)
+    ):
+        reference_time = schedule.updated_at
+
+    if isinstance(reference_time, datetime):
+        elapsed_seconds = int((now - reference_time).total_seconds())
+    else:
+        elapsed_seconds = int(now.timestamp() - reference_time)
+
+    config_interval = _safe_int(get_config("IGNORE_INTERVAL", 900, session=session), 900)
     if config_interval <= 0:
         config_interval = 900
 
@@ -138,7 +147,10 @@ def detect_ignore_mode(session: Session, schedule) -> Dict[str, Any]:
     if existing_same_trigger:
         return {"detected": True, "ignore_time": ignore_time}
 
-    ignore_max_retry = _safe_int(get_config("IGNORE_MAX_RETRY", 5), 5)
+    ignore_max_retry = _safe_int(
+        get_config("IGNORE_MAX_RETRY", 5, session=session),
+        5,
+    )
     if ignore_max_retry <= 0:
         ignore_max_retry = 1
 
@@ -152,7 +164,10 @@ def detect_ignore_mode(session: Session, schedule) -> Dict[str, Any]:
     value = int(punishment_data["value"])
 
     if stimulus_type == "zap":
-        zap_limit = _safe_int(get_config("LIMIT_DAY_PAVLOK_COUNTS", 100), 100)
+        zap_limit = _safe_int(
+            get_config("LIMIT_DAY_PAVLOK_COUNTS", 100, session=session),
+            100,
+        )
         if zap_limit <= 0:
             zap_limit = 1
         zap_count = _count_today_zap_executions(session, str(schedule.user_id))

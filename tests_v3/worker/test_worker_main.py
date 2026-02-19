@@ -150,7 +150,7 @@ class TestPunishmentWorker:
         with patch.object(worker, "execute_script"):
             await worker.process_schedule(schedule)
 
-        assert schedule.state == ScheduleState.DONE
+        assert schedule.state == ScheduleState.PROCESSING
 
     @pytest.mark.asyncio
     async def test_process_schedule_failure_retry(self, v3_db_session, v3_test_data_factory):
@@ -196,6 +196,8 @@ class TestPunishmentWorker:
             state=ScheduleState.PROCESSING,
             event_type=EventType.PLAN,
         )
+        schedule.updated_at = datetime.now() - timedelta(minutes=20)
+        v3_db_session.commit()
 
         worker = PunishmentWorker(v3_db_session)
         await worker.monitor_processing_schedules()
@@ -243,6 +245,28 @@ class TestPunishmentWorker:
         assert str(newer.id) in monitored_schedule_ids
         assert str(other_user.id) in monitored_schedule_ids
         assert str(older.id) not in monitored_schedule_ids
+
+    @pytest.mark.asyncio
+    async def test_monitor_processing_includes_remind(
+        self, v3_db_session, v3_test_data_factory
+    ):
+        """processing監視対象にremindも含まれること"""
+        remind_schedule = v3_test_data_factory.create_schedule(
+            event_type=EventType.REMIND,
+            run_at=datetime.now() - timedelta(minutes=20),
+            state=ScheduleState.PROCESSING,
+        )
+
+        worker = PunishmentWorker(v3_db_session)
+        with patch("backend.worker.ignore_mode.detect_ignore_mode") as mock_ignore:
+            mock_ignore.return_value = {"detected": False, "ignore_time": 0}
+            await worker.monitor_processing_schedules()
+
+        monitored_schedule_ids = {
+            str(call.args[1].id)
+            for call in mock_ignore.call_args_list
+        }
+        assert str(remind_schedule.id) in monitored_schedule_ids
 
     @pytest.mark.asyncio
     async def test_main_loop_interval(self, v3_db_session):

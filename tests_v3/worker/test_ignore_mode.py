@@ -15,6 +15,11 @@ from backend.models import (
 @pytest.mark.asyncio
 class TestIgnoreModeDetection:
 
+    @staticmethod
+    def _set_processing_started_at(session, schedule, seconds_ago: int) -> None:
+        schedule.updated_at = datetime.now() - timedelta(seconds=seconds_ago)
+        session.commit()
+
     @pytest.mark.asyncio
     async def test_detect_ignore_single_interval(self, v3_db_session, v3_test_data_factory):
         """1回のignore_intervalを検知できること"""
@@ -22,6 +27,7 @@ class TestIgnoreModeDetection:
             run_at=datetime.now() - timedelta(seconds=900),  # IGNORE_INTERVAL default
             state=ScheduleState.PROCESSING,
         )
+        self._set_processing_started_at(v3_db_session, schedule, 900)
 
         from backend.worker import ignore_mode
         original_send = ignore_mode._send_punishment
@@ -43,6 +49,7 @@ class TestIgnoreModeDetection:
             run_at=datetime.now() - timedelta(seconds=1800),  # 30分 = 2 intervals
             state=ScheduleState.PROCESSING,
         )
+        self._set_processing_started_at(v3_db_session, schedule, 1800)
 
         from backend.worker import ignore_mode
         original_send = ignore_mode._send_punishment
@@ -61,7 +68,9 @@ class TestIgnoreModeDetection:
         """ignore_interval内では検知しないこと"""
         schedule = v3_test_data_factory.create_schedule(
             run_at=datetime.now() - timedelta(seconds=300),  # 5分 < 15分
+            state=ScheduleState.PROCESSING,
         )
+        self._set_processing_started_at(v3_db_session, schedule, 300)
 
         result = detect_ignore_mode(v3_db_session, schedule)
         assert result["detected"] is False
@@ -101,6 +110,7 @@ class TestIgnoreModeDetection:
             run_at=datetime.now() - timedelta(seconds=900),
             state=ScheduleState.PROCESSING,
         )
+        self._set_processing_started_at(v3_db_session, schedule, 900)
         v3_test_data_factory.create_punishment(
             schedule_id=schedule.id,
             mode=PunishmentMode.IGNORE,
@@ -128,6 +138,7 @@ class TestIgnoreModeDetection:
             run_at=datetime.now() - timedelta(seconds=8100),  # ignore_time=9
             state=ScheduleState.PROCESSING,
         )
+        self._set_processing_started_at(v3_db_session, schedule, 8100)
 
         from backend.worker import ignore_mode
         original_send = ignore_mode._send_punishment
@@ -158,6 +169,7 @@ class TestIgnoreModeDetection:
             run_at=datetime.now() - timedelta(seconds=2700),  # ignore_time=3
             state=ScheduleState.PROCESSING,
         )
+        self._set_processing_started_at(v3_db_session, schedule, 2700)
 
         from backend.worker import ignore_mode
         original_get_config = __import__("backend.worker.config_cache", fromlist=["get_config"]).get_config
