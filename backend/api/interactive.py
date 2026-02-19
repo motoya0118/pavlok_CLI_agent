@@ -505,6 +505,28 @@ def _load_active_commitments_for_user(user_id: str) -> list[dict[str, str]]:
         session.close()
 
 
+def _resolve_commitment_task_name_for_schedule(session, schedule) -> str:
+    """Resolve task name from active commitments using schedule run time."""
+    run_at = getattr(schedule, "run_at", None)
+    if not isinstance(run_at, datetime):
+        return "タスク"
+
+    run_time = run_at.strftime("%H:%M:%S")
+    row = (
+        session.query(Commitment.task)
+        .filter(
+            Commitment.user_id == schedule.user_id,
+            Commitment.active.is_(True),
+            Commitment.time == run_time,
+        )
+        .order_by(Commitment.updated_at.desc(), Commitment.created_at.desc())
+        .first()
+    )
+    if row and row[0]:
+        return str(row[0])
+    return "タスク"
+
+
 def _extract_schedule_id_from_action(payload_data: Dict[str, Any]) -> str:
     """Extract schedule_id from block action value JSON."""
     actions = payload_data.get("actions", [])
@@ -1555,7 +1577,7 @@ async def process_remind_response(payload_data: Dict[str, Any], action: str = "Y
         schedule.updated_at = datetime.now()
         session.commit()
 
-        task_name = schedule.comment or "タスク"
+        task_name = _resolve_commitment_task_name_for_schedule(session, schedule)
         if action_value == "YES":
             detail = "やりました！"
             text = f"<@{user_id}> {task_name} を完了として記録しました。"

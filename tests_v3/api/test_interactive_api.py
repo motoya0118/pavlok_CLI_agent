@@ -1,5 +1,6 @@
 # v0.3 Interactive API Tests
 import json
+import asyncio
 from datetime import datetime, timedelta
 
 import pytest
@@ -492,6 +493,69 @@ class TestInteractiveApi:
         )
         assert no_punishments == 1
         session.close()
+
+    @pytest.mark.asyncio
+    async def test_remind_response_reply_uses_commitment_task_name(self, monkeypatch, tmp_path):
+        db_path = tmp_path / "remind_task_name.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        captured: dict[str, str] = {}
+
+        async def _fake_notify_remind_result(channel_id, user_id, thread_ts, text, blocks):
+            captured["text"] = text
+
+        monkeypatch.setattr(
+            "backend.api.interactive._notify_remind_result",
+            _fake_notify_remind_result,
+        )
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
+        Session = sessionmaker(bind=engine)
+
+        user_id = "U03JBULT484"
+        run_at = datetime(2026, 2, 16, 7, 0, 0)
+        session = Session()
+        session.add(
+            Commitment(
+                user_id=user_id,
+                task="ジム行く",
+                time="07:00:00",
+                active=True,
+            )
+        )
+        schedule = Schedule(
+            user_id=user_id,
+            event_type=EventType.REMIND,
+            run_at=run_at,
+            state=ScheduleState.PROCESSING,
+            comment="これはリマインド本文",
+        )
+        session.add(schedule)
+        session.commit()
+        schedule_id = schedule.id
+        session.close()
+
+        payload_data = {
+            "type": "block_actions",
+            "user": {"id": user_id},
+            "actions": [{"action_id": "remind_yes", "value": f'{{"schedule_id": "{schedule_id}"}}'}],
+            "container": {"channel_id": "C123"},
+        }
+
+        result = await process_remind_response(payload_data, "YES")
+        assert result["status"] == "success"
+        await asyncio.sleep(0)
+
+        assert "text" in captured
+        assert "ジム行く" in captured["text"]
+        assert "これはリマインド本文" not in captured["text"]
 
     @pytest.mark.asyncio
     async def test_remind_response_first_click_wins(self, monkeypatch, tmp_path):
