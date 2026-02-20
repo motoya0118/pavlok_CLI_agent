@@ -1,13 +1,14 @@
 # v0.3 Config API Tests
-import pytest
 from unittest.mock import MagicMock
-from fastapi import Request, HTTPException, status
+
+import pytest
+from fastapi import Request
+
 from backend.api.config import get_configurations, upsert_configuration
 
 
 @pytest.mark.asyncio
 class TestConfigApi:
-
     @pytest.mark.asyncio
     async def test_get_configurations(self, v3_db_session, v3_test_data_factory):
         request = MagicMock(spec=Request)

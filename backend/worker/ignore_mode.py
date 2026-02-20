@@ -1,6 +1,7 @@
 """Ignore Mode Detection Module"""
+
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -13,7 +14,7 @@ def _safe_int(value: object, default: int) -> int:
         return default
 
 
-def calculate_ignore_punishment(ignore_time: int) -> Dict[str, Any]:
+def calculate_ignore_punishment(ignore_time: int) -> dict[str, Any]:
     """
     ignore回数から罰を計算する
 
@@ -50,7 +51,7 @@ def _send_punishment(stimulus_type: str, value: int, reason: str = "") -> bool:
 
 def _mark_auto_ignore_once(session: Session, schedule, now: datetime) -> None:
     """Mark schedule canceled and append AUTO_IGNORE action once."""
-    from backend.models import ScheduleState, ActionLog, ActionResult
+    from backend.models import ActionLog, ActionResult, ScheduleState
 
     schedule.state = ScheduleState.CANCELED
     schedule.updated_at = now
@@ -75,6 +76,7 @@ def _mark_auto_ignore_once(session: Session, schedule, now: datetime) -> None:
 def _count_today_zap_executions(session: Session, user_id: str) -> int:
     """Count today's zap executions from punishment records for the user."""
     from sqlalchemy import and_, or_
+
     from backend.models import Punishment, PunishmentMode, Schedule
 
     now = datetime.now()
@@ -101,7 +103,7 @@ def _count_today_zap_executions(session: Session, user_id: str) -> int:
     )
 
 
-def detect_ignore_mode(session: Session, schedule) -> Dict[str, Any]:
+def detect_ignore_mode(session: Session, schedule) -> dict[str, Any]:
     """
     ignore_modeを検知する
 
@@ -119,9 +121,8 @@ def detect_ignore_mode(session: Session, schedule) -> Dict[str, Any]:
 
     # Use processing start time as ignore timer origin.
     reference_time = schedule.run_at
-    if (
-        getattr(schedule, "state", None) == ScheduleState.PROCESSING
-        and isinstance(getattr(schedule, "updated_at", None), datetime)
+    if getattr(schedule, "state", None) == ScheduleState.PROCESSING and isinstance(
+        getattr(schedule, "updated_at", None), datetime
     ):
         reference_time = schedule.updated_at
 

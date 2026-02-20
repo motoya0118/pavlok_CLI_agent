@@ -1,10 +1,10 @@
 # v0.3 Behavior Log Tests (TDD)
-import pytest
 from datetime import datetime, timedelta
-from sqlalchemy import func, and_
 
-from backend.models import ActionLog, ActionResult, Schedule
+from sqlalchemy import and_, func
+
 from backend.behavior_log_lib import BehaviorLogger
+from backend.models import ActionLog, ActionResult
 
 
 class TestBehaviorLogger:
@@ -15,10 +15,7 @@ class TestBehaviorLogger:
         schedule = v3_test_data_factory.create_schedule()
         logger = BehaviorLogger(v3_db_session)
 
-        action_log = logger.log_action(
-            schedule_id=schedule.id,
-            result=ActionResult.YES
-        )
+        action_log = logger.log_action(schedule_id=schedule.id, result=ActionResult.YES)
 
         assert action_log.id is not None
         assert action_log.schedule_id == schedule.id
@@ -31,10 +28,7 @@ class TestBehaviorLogger:
         schedule = v3_test_data_factory.create_schedule()
         logger = BehaviorLogger(v3_db_session)
 
-        action_log = logger.log_action(
-            schedule_id=schedule.id,
-            result=ActionResult.NO
-        )
+        action_log = logger.log_action(schedule_id=schedule.id, result=ActionResult.NO)
 
         assert action_log.id is not None
         assert action_log.result == ActionResult.NO
@@ -44,10 +38,7 @@ class TestBehaviorLogger:
         schedule = v3_test_data_factory.create_schedule()
         logger = BehaviorLogger(v3_db_session)
 
-        action_log = logger.log_action(
-            schedule_id=schedule.id,
-            result=ActionResult.AUTO_IGNORE
-        )
+        action_log = logger.log_action(schedule_id=schedule.id, result=ActionResult.AUTO_IGNORE)
 
         assert action_log.id is not None
         assert action_log.result == ActionResult.AUTO_IGNORE
@@ -78,7 +69,7 @@ class TestBehaviorLogger:
         now = datetime.now()
         logger.log_action(schedule.id, ActionResult.YES)
 
-        old_time = now - timedelta(hours=1)
+        now - timedelta(hours=1)
         # Note: Can't manipulate time in SQLite easily due to CHECK constraint
         # So this test is skipped for now
 
@@ -100,21 +91,29 @@ class TestBehaviorLogger:
         # Manual count query
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-        yes_count = v3_db_session.query(func.count(ActionLog.id)).filter(
-            and_(
-                ActionLog.schedule_id == schedule.id,
-                ActionLog.result == ActionResult.YES,
-                ActionLog.created_at >= today_start
+        yes_count = (
+            v3_db_session.query(func.count(ActionLog.id))
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule.id,
+                    ActionLog.result == ActionResult.YES,
+                    ActionLog.created_at >= today_start,
+                )
             )
-        ).scalar()
+            .scalar()
+        )
 
-        no_count = v3_db_session.query(func.count(ActionLog.id)).filter(
-            and_(
-                ActionLog.schedule_id == schedule.id,
-                ActionLog.result == ActionResult.NO,
-                ActionLog.created_at >= today_start
+        no_count = (
+            v3_db_session.query(func.count(ActionLog.id))
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule.id,
+                    ActionLog.result == ActionResult.NO,
+                    ActionLog.created_at >= today_start,
+                )
             )
-        ).scalar()
+            .scalar()
+        )
 
         assert yes_count == 2
         assert no_count == 1

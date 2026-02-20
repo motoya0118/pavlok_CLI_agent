@@ -1,9 +1,11 @@
 """Config API Endpoints"""
-from fastapi import Request, HTTPException, status
-from typing import Dict, Any
+
+from typing import Any
+
+from fastapi import Request
 
 
-async def get_configurations(request: Request) -> Dict[str, Any]:
+async def get_configurations(request: Request) -> dict[str, Any]:
     """
     設定値一覧取得
 
@@ -21,13 +23,13 @@ async def get_configurations(request: Request) -> Dict[str, Any]:
                 "PAVLOK_TYPE_PUNISH": "beep",
                 "PAVLOK_VALUE_PUNISH": 35,
                 "IGNORE_LIMIT": 3,
-                "REMIND_ENABLED": True
+                "REMIND_ENABLED": True,
             }
-        }
+        },
     }
 
 
-async def upsert_configuration(request: Request, config_data: Dict[str, Any]) -> Dict[str, Any]:
+async def upsert_configuration(request: Request, config_data: dict[str, Any]) -> dict[str, Any]:
     """
     設定値更新・登録
 
@@ -47,14 +49,10 @@ async def upsert_configuration(request: Request, config_data: Dict[str, Any]) ->
         else:
             updated[key] = value
 
-    return {
-        "status": "success",
-        "detail": "設定を更新しました",
-        "data": updated
-    }
+    return {"status": "success", "detail": "設定を更新しました", "data": updated}
 
 
-async def reset_configuration(request: Request, key: str = None) -> Dict[str, Any]:
+async def reset_configuration(request: Request, key: str = None) -> dict[str, Any]:
     """
     設定値リセット
 
@@ -68,5 +66,5 @@ async def reset_configuration(request: Request, key: str = None) -> Dict[str, An
     # TODO: Implement actual config reset with audit log
     return {
         "status": "success",
-        "detail": f"設定{'(' + key + ')' if key else ''}をリセットしました"
+        "detail": f"設定{'(' + key + ')' if key else ''}をリセットしました",
     }

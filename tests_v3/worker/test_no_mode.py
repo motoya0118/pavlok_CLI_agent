@@ -1,14 +1,14 @@
 # v0.3 Worker No Mode Detection Tests
-import pytest
-from unittest.mock import MagicMock
 from datetime import datetime, timedelta
-from backend.worker.no_mode import detect_no_mode, calculate_no_punishment
-from backend.models import Schedule, Punishment, PunishmentMode
+
+import pytest
+
+from backend.models import Punishment, PunishmentMode
+from backend.worker.no_mode import calculate_no_punishment, detect_no_mode
 
 
 @pytest.mark.asyncio
 class TestNoModeDetection:
-
     @pytest.mark.asyncio
     async def test_detect_no_response_within_timeout(self, v3_db_session, v3_test_data_factory):
         """TIMEOUT_REMIND内で応答がない場合no_modeを検知できること"""
@@ -67,10 +67,10 @@ class TestNoModeDetection:
             run_at=datetime.now() - timedelta(seconds=600)
         )
         # Create existing punishment with count=1 (which matches no_time=1)
-        existing_punishment = v3_test_data_factory.create_punishment(
+        v3_test_data_factory.create_punishment(
             schedule_id=schedule.id,
             mode=PunishmentMode.NO,
-            count=1  # This matches no_time
+            count=1,  # This matches no_time
         )
 
         result = detect_no_mode(v3_db_session, schedule)
@@ -83,16 +83,13 @@ class TestNoModeDetection:
     @pytest.mark.asyncio
     async def test_yes_response_clears_no_mode(self, v3_db_session, v3_test_data_factory):
         """YES応答でno_mode検知がリセットされること"""
-        from backend.models import ActionLog, ActionResult
+        from backend.models import ActionResult
 
         schedule = v3_test_data_factory.create_schedule(
             run_at=datetime.now() - timedelta(seconds=600)
         )
         # Create YES action log
-        action_log = v3_test_data_factory.create_action_log(
-            schedule_id=schedule.id,
-            result=ActionResult.YES
-        )
+        v3_test_data_factory.create_action_log(schedule_id=schedule.id, result=ActionResult.YES)
 
         result = detect_no_mode(v3_db_session, schedule)
         assert result["detected"] is False

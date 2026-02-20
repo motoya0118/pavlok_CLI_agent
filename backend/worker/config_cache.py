@@ -1,12 +1,12 @@
 """Config Cache Module"""
-import os
-import json
-from typing import Any, Dict
-from datetime import datetime, timedelta
 
+import json
+import os
+from datetime import datetime, timedelta
+from typing import Any
 
 # Cache storage: {key: (value, expire_time)}
-_config_cache: Dict[str, tuple[Any, datetime]] = {}
+_config_cache: dict[str, tuple[Any, datetime]] = {}
 CACHE_TTL = timedelta(seconds=60)  # 60秒キャッシュ
 ENV_ONLY_KEYS = {"TIMEOUT_REMIND", "TIMEOUT_REVIEW", "RETRY_DELAY"}
 ENV_FALLBACK_KEYS = {

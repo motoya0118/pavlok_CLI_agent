@@ -1,6 +1,6 @@
 # v0.3 Interactive API Tests
-import json
 import asyncio
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -9,25 +9,25 @@ from sqlalchemy.orm import sessionmaker
 
 import backend.api.interactive as interactive_api
 from backend.api.interactive import (
-    process_plan_submit,
-    process_plan_modal_submit,
-    process_remind_response,
-    process_ignore_response,
     process_commitment_add_row,
     process_commitment_remove_row,
+    process_ignore_response,
+    process_plan_modal_submit,
+    process_plan_submit,
+    process_remind_response,
 )
 from backend.models import (
-    Base,
-    Schedule,
-    Commitment,
     ActionLog,
     ActionResult,
-    EventType,
-    ScheduleState,
-    Punishment,
-    PunishmentMode,
+    Base,
+    Commitment,
     Configuration,
     ConfigValueType,
+    EventType,
+    Punishment,
+    PunishmentMode,
+    Schedule,
+    ScheduleState,
 )
 from backend.slack_ui import base_commit_modal
 from backend.worker.config_cache import invalidate_config_cache
@@ -35,10 +35,9 @@ from backend.worker.config_cache import invalidate_config_cache
 
 @pytest.mark.asyncio
 class TestInteractiveApi:
-
     @pytest.mark.asyncio
     async def test_plan_submit(self, v3_db_session, v3_test_data_factory):
-        schedule = v3_test_data_factory.create_schedule()
+        v3_test_data_factory.create_schedule()
 
         payload_data = {
             "type": "view_submission",
@@ -50,10 +49,10 @@ class TestInteractiveApi:
                         "task_1": {"task": "朝の瞑想", "time": "07:00"},
                         "task_2": {"task": "メールチェック", "time": "09:00"},
                         "task_3": {"task": "振り返り", "time": "22:00"},
-                        "next_plan": {"date": "tomorrow", "time": "07:00"}
+                        "next_plan": {"date": "tomorrow", "time": "07:00"},
                     }
-                }
-            }
+                },
+            },
         }
 
         result = await process_plan_submit(payload_data)
@@ -66,10 +65,13 @@ class TestInteractiveApi:
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
         async def _fake_notify_plan_saved(*args, **kwargs):
             return None
+
         async def _fake_run_agent_call(*args, **kwargs):
             return None
+
         monkeypatch.setattr("backend.api.interactive._notify_plan_saved", _fake_notify_plan_saved)
         monkeypatch.setattr("backend.api.interactive._run_agent_call", _fake_run_agent_call)
 
@@ -78,9 +80,9 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
-        session = Session()
+        session = session_factory()
         user_id = "U03JBULT484"
         opened_plan = Schedule(
             user_id=user_id,
@@ -118,9 +120,7 @@ class TestInteractiveApi:
             state=ScheduleState.PENDING,
             comment="old remind",
         )
-        session.add_all(
-            [old_pending_plan, old_pending_remind]
-        )
+        session.add_all([old_pending_plan, old_pending_remind])
         session.commit()
         opened_plan_id = opened_plan.id
         old_pending_plan_id = old_pending_plan.id
@@ -195,7 +195,7 @@ class TestInteractiveApi:
         result = await process_plan_modal_submit(payload_data)
         assert result["response_action"] == "clear"
 
-        session = Session()
+        session = session_factory()
         refreshed_opened_plan = session.get(Schedule, opened_plan_id)
         assert refreshed_opened_plan is not None
         assert refreshed_opened_plan.state == ScheduleState.DONE
@@ -257,9 +257,9 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
-        session = Session()
+        session = session_factory()
         user_id = "U03JBULT484"
         commitment_1 = Commitment(
             user_id=user_id,
@@ -349,7 +349,7 @@ class TestInteractiveApi:
         result = await process_plan_modal_submit(payload_data)
         assert result["response_action"] == "clear"
 
-        session = Session()
+        session = session_factory()
         remind_schedules = (
             session.query(Schedule)
             .filter(
@@ -374,10 +374,13 @@ class TestInteractiveApi:
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
         async def _fake_notify_plan_saved(*args, **kwargs):
             return None
+
         async def _fake_run_agent_call(*args, **kwargs):
             return None
+
         monkeypatch.setattr("backend.api.interactive._notify_plan_saved", _fake_notify_plan_saved)
         monkeypatch.setattr("backend.api.interactive._run_agent_call", _fake_run_agent_call)
 
@@ -386,9 +389,9 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
-        session = Session()
+        session = session_factory()
         user_id = "U03JBULT484"
         opened_plan = Schedule(
             user_id=user_id,
@@ -476,7 +479,7 @@ class TestInteractiveApi:
         result = await process_plan_modal_submit(payload_data)
         assert result["response_action"] == "clear"
 
-        session = Session()
+        session = session_factory()
         skipped_logs = (
             session.query(ActionLog)
             .filter(
@@ -506,8 +509,10 @@ class TestInteractiveApi:
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
         async def _fake_notify_remind_result(*args, **kwargs):
             return None
+
         monkeypatch.setattr(
             "backend.api.interactive._notify_remind_result",
             _fake_notify_remind_result,
@@ -518,9 +523,9 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
-        session = Session()
+        session = session_factory()
         user_id = "U03JBULT484"
         run_at = datetime.now().replace(microsecond=0)
         commitment = Commitment(
@@ -547,7 +552,9 @@ class TestInteractiveApi:
         payload_data = {
             "type": "block_actions",
             "user": {"id": user_id},
-            "actions": [{"action_id": "remind_yes", "value": f'{{"schedule_id": "{schedule_id}"}}'}],
+            "actions": [
+                {"action_id": "remind_yes", "value": f'{{"schedule_id": "{schedule_id}"}}'}
+            ],
             "container": {"channel_id": "C123"},
         }
 
@@ -557,7 +564,7 @@ class TestInteractiveApi:
         assert result.get("response_type") == "ephemeral"
         assert result.get("replace_original") is False
 
-        session = Session()
+        session = session_factory()
         refreshed = session.get(Schedule, schedule_id)
         assert refreshed is not None
         assert refreshed.state == ScheduleState.DONE
@@ -579,14 +586,18 @@ class TestInteractiveApi:
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
         async def _fake_notify_remind_result(*args, **kwargs):
             return None
+
         monkeypatch.setattr(
             "backend.api.interactive._notify_remind_result",
             _fake_notify_remind_result,
         )
+
         async def _fake_no_punishment(*args, **kwargs):
             return None
+
         monkeypatch.setattr("backend.api.interactive._send_no_punishment", _fake_no_punishment)
 
         engine = create_engine(
@@ -594,9 +605,9 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
-        session = Session()
+        session = session_factory()
         user_id = "U03JBULT484"
         run_at = datetime.now().replace(microsecond=0)
         commitment = Commitment(
@@ -633,7 +644,7 @@ class TestInteractiveApi:
         assert result.get("response_type") == "ephemeral"
         assert result.get("replace_original") is False
 
-        session = Session()
+        session = session_factory()
         refreshed = session.get(Schedule, schedule_id)
         assert refreshed is not None
         assert refreshed.state == ScheduleState.DONE
@@ -688,11 +699,11 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
         user_id = "U03JBULT484"
         run_at = datetime(2026, 2, 16, 7, 0, 0)
-        session = Session()
+        session = session_factory()
         commitment = Commitment(
             user_id=user_id,
             task="ジム行く",
@@ -717,7 +728,9 @@ class TestInteractiveApi:
         payload_data = {
             "type": "block_actions",
             "user": {"id": user_id},
-            "actions": [{"action_id": "remind_yes", "value": f'{{"schedule_id": "{schedule_id}"}}'}],
+            "actions": [
+                {"action_id": "remind_yes", "value": f'{{"schedule_id": "{schedule_id}"}}'}
+            ],
             "container": {"channel_id": "C123"},
         }
 
@@ -736,14 +749,18 @@ class TestInteractiveApi:
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
         async def _fake_notify_remind_result(*args, **kwargs):
             return None
+
         monkeypatch.setattr(
             "backend.api.interactive._notify_remind_result",
             _fake_notify_remind_result,
         )
+
         async def _fake_no_punishment(*args, **kwargs):
             return None
+
         monkeypatch.setattr("backend.api.interactive._send_no_punishment", _fake_no_punishment)
 
         engine = create_engine(
@@ -751,9 +768,9 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
-        session = Session()
+        session = session_factory()
         user_id = "U03JBULT484"
         run_at = datetime.now().replace(microsecond=0)
         commitment = Commitment(
@@ -780,7 +797,9 @@ class TestInteractiveApi:
         yes_payload = {
             "type": "block_actions",
             "user": {"id": user_id},
-            "actions": [{"action_id": "remind_yes", "value": f'{{"schedule_id": "{schedule_id}"}}'}],
+            "actions": [
+                {"action_id": "remind_yes", "value": f'{{"schedule_id": "{schedule_id}"}}'}
+            ],
             "container": {"channel_id": "C123"},
         }
         no_payload = {
@@ -798,7 +817,7 @@ class TestInteractiveApi:
         assert second["status"] == "success"
         assert second.get("detail") == "すでに応答済みです。"
 
-        session = Session()
+        session = session_factory()
         refreshed = session.get(Schedule, schedule_id)
         assert refreshed is not None
         assert refreshed.state == ScheduleState.DONE
@@ -838,10 +857,10 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
         user_id = "U03JBULT484"
-        session = Session()
+        session = session_factory()
         session.add(
             Configuration(
                 user_id=user_id,
@@ -897,9 +916,7 @@ class TestInteractiveApi:
         assert calls == [("zap", 45, "remind: タスク")]
 
     @pytest.mark.asyncio
-    async def test_send_no_punishment_skips_when_daily_limit_exceeded(
-        self, monkeypatch, tmp_path
-    ):
+    async def test_send_no_punishment_skips_when_daily_limit_exceeded(self, monkeypatch, tmp_path):
         db_path = tmp_path / "send_no_punishment_limit_exceeded.sqlite3"
         database_url = f"sqlite:///{db_path}"
         invalidate_config_cache()
@@ -912,10 +929,10 @@ class TestInteractiveApi:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
         user_id = "U03JBULT484"
-        session = Session()
+        session = session_factory()
         session.add(
             Configuration(
                 user_id=user_id,
@@ -988,17 +1005,16 @@ class TestInteractiveApi:
     async def test_ignore_response_yes(self, v3_db_session, v3_test_data_factory):
         schedule = v3_test_data_factory.create_schedule()
 
-        action_log = ActionLog(
-            schedule_id=schedule.id,
-            result=ActionResult.YES
-        )
+        action_log = ActionLog(schedule_id=schedule.id, result=ActionResult.YES)
         v3_db_session.add(action_log)
         v3_db_session.commit()
 
         payload_data = {
             "type": "block_actions",
             "user": {"id": "U03JBULT484"},
-            "actions": [{"action_id": "ignore_yes", "value": f'{{"schedule_id": "{schedule.id}"}}'}]
+            "actions": [
+                {"action_id": "ignore_yes", "value": f'{{"schedule_id": "{schedule.id}"}}'}
+            ],
         }
 
         result = await process_ignore_response(payload_data)
@@ -1009,17 +1025,14 @@ class TestInteractiveApi:
     async def test_ignore_response_no(self, v3_db_session, v3_test_data_factory):
         schedule = v3_test_data_factory.create_schedule()
 
-        action_log = ActionLog(
-            schedule_id=schedule.id,
-            result=ActionResult.NO
-        )
+        action_log = ActionLog(schedule_id=schedule.id, result=ActionResult.NO)
         v3_db_session.add(action_log)
         v3_db_session.commit()
 
         payload_data = {
             "type": "block_actions",
             "user": {"id": "U03JBULT484"},
-            "actions": [{"action_id": "ignore_no", "value": f'{{"schedule_id": "{schedule.id}"}}'}]
+            "actions": [{"action_id": "ignore_no", "value": f'{{"schedule_id": "{schedule.id}"}}'}],
         }
 
         result = await process_ignore_response(payload_data)
@@ -1037,7 +1050,9 @@ class TestInteractiveApi:
                 **modal,
                 "state": {
                     "values": {
-                        "commitment_1": {"task_1": {"type": "plain_text_input", "value": "朝の瞑想"}},
+                        "commitment_1": {
+                            "task_1": {"type": "plain_text_input", "value": "朝の瞑想"}
+                        },
                         "time_1": {"time_1": {"type": "timepicker", "selected_time": "07:00"}},
                         "commitment_2": {"task_2": {"type": "plain_text_input", "value": ""}},
                         "time_2": {"time_2": {"type": "timepicker", "selected_time": None}},
@@ -1052,8 +1067,7 @@ class TestInteractiveApi:
         assert result["response_action"] == "update"
         updated_view = result["view"]
         task_blocks = [
-            b for b in updated_view["blocks"]
-            if b.get("block_id", "").startswith("commitment_")
+            b for b in updated_view["blocks"] if b.get("block_id", "").startswith("commitment_")
         ]
         assert len(task_blocks) == 4
 
@@ -1074,8 +1088,7 @@ class TestInteractiveApi:
         result = await process_commitment_add_row(payload_data)
         updated_view = result["view"]
         task_blocks = [
-            b for b in updated_view["blocks"]
-            if b.get("block_id", "").startswith("commitment_")
+            b for b in updated_view["blocks"] if b.get("block_id", "").startswith("commitment_")
         ]
         assert len(task_blocks) == 10
 
@@ -1097,8 +1110,7 @@ class TestInteractiveApi:
         assert result["response_action"] == "update"
         updated_view = result["view"]
         task_blocks = [
-            b for b in updated_view["blocks"]
-            if b.get("block_id", "").startswith("commitment_")
+            b for b in updated_view["blocks"] if b.get("block_id", "").startswith("commitment_")
         ]
         assert len(task_blocks) == 3
 
@@ -1118,7 +1130,6 @@ class TestInteractiveApi:
         result = await process_commitment_remove_row(payload_data)
         updated_view = result["view"]
         task_blocks = [
-            b for b in updated_view["blocks"]
-            if b.get("block_id", "").startswith("commitment_")
+            b for b in updated_view["blocks"] if b.get("block_id", "").startswith("commitment_")
         ]
         assert len(task_blocks) == 3

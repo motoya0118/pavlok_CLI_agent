@@ -1,12 +1,15 @@
 """Slack署名検証"""
-import os
+
 import hashlib
 import hmac
-from fastapi import Request, HTTPException, status
+import os
+
+from fastapi import HTTPException, Request, status
 
 
 class SignatureVerificationError(Exception):
     """署名検証エラー"""
+
     pass
 
 
@@ -33,12 +36,11 @@ async def verify_slack_signature(request: Request) -> bool:
         if not timestamp or not signature:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing signature headers (dev mode)"
+                detail="Missing signature headers (dev mode)",
             )
         # ヘッダーがあっても無効なら401
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="SLACK_SIGNING_SECRET not configured"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="SLACK_SIGNING_SECRET not configured"
         )
 
     timestamp = request.headers.get("X-Slack-Request-Timestamp")
@@ -46,8 +48,7 @@ async def verify_slack_signature(request: Request) -> bool:
 
     if not timestamp or not signature:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing signature headers"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing signature headers"
         )
 
     # Get request body
@@ -64,9 +65,7 @@ async def verify_slack_signature(request: Request) -> bool:
 
     # Calculate expected signature
     expected_hash = hmac.new(
-        signing_secret.encode(),
-        msg=sig_basestring.encode(),
-        digestmod=hashlib.sha256
+        signing_secret.encode(), msg=sig_basestring.encode(), digestmod=hashlib.sha256
     ).hexdigest()
     expected_signature = f"v0={expected_hash}"
 
@@ -75,10 +74,7 @@ async def verify_slack_signature(request: Request) -> bool:
 
     # Verify signature
     if signature != expected_signature:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid signature"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
 
     return True
 

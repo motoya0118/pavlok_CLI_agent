@@ -3,48 +3,58 @@ v0.3 Database Models
 
 Oni System v0.3で使用するデータベースモデル定義
 """
+
+import enum
+import uuid
+from datetime import datetime
+
 from sqlalchemy import (
-    Column,
+    JSON,
+    Boolean,
+    CheckConstraint,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
-    Boolean,
-    Enum as SQLEnum,
-    JSON,
     UniqueConstraint,
-    CheckConstraint,
-    ForeignKey,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from datetime import datetime
-import uuid
-import enum
+
 
 class Base(DeclarativeBase):
     """SQLAlchemy 2.0 DeclarativeBase for v0.3 models."""
+
     pass
 
 
 class UUIDMixin:
     """UUID PKを持つMixin"""
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
     def __init__(self, **kwargs):
         # idが渡されない場合のみ自動生成
-        if 'id' not in kwargs:
+        if "id" not in kwargs:
             self.id = str(uuid.uuid4())
         super().__init__(**kwargs)
 
 
 class TimestampMixin:
     """作成日時・更新日時を持つMixin"""
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now()
+    )
 
 
-class ScheduleState(str, enum.Enum):
+class ScheduleState(enum.StrEnum):
     """スケジュールの状態"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     DONE = "done"
@@ -53,29 +63,33 @@ class ScheduleState(str, enum.Enum):
     CANCELED = "canceled"
 
 
-class EventType(str, enum.Enum):
+class EventType(enum.StrEnum):
     """イベント種別"""
+
     PLAN = "plan"
     REMIND = "remind"
 
 
-class ActionResult(str, enum.Enum):
+class ActionResult(enum.StrEnum):
     """アクション結果"""
+
     YES = "YES"
     NO = "NO"
     AUTO_IGNORE = "AUTO_IGNORE"
 
 
-class PunishmentMode(str, enum.Enum):
+class PunishmentMode(enum.StrEnum):
     """罰モード"""
+
     IGNORE = "ignore"
     NO = "no"
     ZAP = "zap"
     VIBE = "vibe"
 
 
-class ConfigValueType(str, enum.Enum):
+class ConfigValueType(enum.StrEnum):
     """設定値の型"""
+
     INT = "int"
     FLOAT = "float"
     STR = "str"
@@ -83,8 +97,9 @@ class ConfigValueType(str, enum.Enum):
     BOOL = "bool"
 
 
-class ChangeSource(str, enum.Enum):
+class ChangeSource(enum.StrEnum):
     """設定変更ソース"""
+
     SLACK_COMMAND = "slack_command"
     ROLLBACK = "rollback"
     RESET = "reset"
@@ -93,6 +108,7 @@ class ChangeSource(str, enum.Enum):
 
 class Commitment(Base, UUIDMixin, TimestampMixin):
     """コミットメント（ユーザーの毎日の予定）"""
+
     __tablename__ = "commitments"
 
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -103,6 +119,7 @@ class Commitment(Base, UUIDMixin, TimestampMixin):
 
 class Schedule(Base, UUIDMixin, TimestampMixin):
     """全ての実行予定を管理するテーブル"""
+
     __tablename__ = "schedules"
 
     commitment_id: Mapped[str | None] = mapped_column(
@@ -114,7 +131,9 @@ class Schedule(Base, UUIDMixin, TimestampMixin):
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(SQLEnum(EventType), nullable=False)
     run_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
-    state: Mapped[str] = mapped_column(SQLEnum(ScheduleState), nullable=False, default=ScheduleState.PENDING)
+    state: Mapped[str] = mapped_column(
+        SQLEnum(ScheduleState), nullable=False, default=ScheduleState.PENDING
+    )
     thread_ts: Mapped[str | None] = mapped_column(String(50), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     yes_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -132,6 +151,7 @@ class Schedule(Base, UUIDMixin, TimestampMixin):
 
 class ActionLog(Base, UUIDMixin):
     """行動ログを記録するテーブル"""
+
     __tablename__ = "action_logs"
 
     schedule_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -141,6 +161,7 @@ class ActionLog(Base, UUIDMixin):
 
 class Punishment(Base, UUIDMixin):
     """罰実行記録を管理するテーブル"""
+
     __tablename__ = "punishments"
 
     schedule_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -156,6 +177,7 @@ class Punishment(Base, UUIDMixin):
 
 class Configuration(Base, UUIDMixin, TimestampMixin):
     """ユーザーが変更可能な設定値を管理するテーブル"""
+
     __tablename__ = "configurations"
 
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -170,18 +192,19 @@ class Configuration(Base, UUIDMixin, TimestampMixin):
     version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # 制約: UNIQUE(user_id, key)
-    __table_args__ = (
-        UniqueConstraint("user_id", "key", name="uix_user_key"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uix_user_key"),)
 
 
 class ConfigAuditLog(Base, UUIDMixin):
     """設定変更の監査ログを記録するテーブル"""
+
     __tablename__ = "config_audit_log"
 
     config_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     changed_by: Mapped[str] = mapped_column(String(50), nullable=False)
-    changed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(), index=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(), index=True
+    )
     change_source: Mapped[str] = mapped_column(SQLEnum(ChangeSource), nullable=False)

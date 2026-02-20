@@ -3,24 +3,24 @@
 This file is used by Alembic to configure the migration environment.
 It connects to the database and provides the context for running migrations.
 """
+
 import os
-from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config, pool
-
-from alembic import context
 
 # Import v0.3 models
 # sys.path needs to include the parent directory to import backend.models
 import sys
+from logging.config import fileConfig
 from pathlib import Path
+
+from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Add backend directory to path
 backend_dir = Path(__file__).resolve().parent.parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from models import Base
+from models import Base  # noqa: E402
 
 # this is the Alembic Config object
 config = context.config

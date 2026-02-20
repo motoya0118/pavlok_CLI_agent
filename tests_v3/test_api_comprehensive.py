@@ -3,20 +3,20 @@
 These tests verify all API endpoints with proper mock data and validation.
 Tests follow v0.3 design document flow.
 """
-import pytest
-import subprocess
-import time
-import json
-import hmac
-import hashlib
-import requests
-import sys
-from typing import Dict, Any
 
+import hashlib
+import hmac
+import subprocess
+import sys
+import time
+
+import pytest
+import requests
 
 # ============================================================================
 # Test Server Management
 # ============================================================================
+
 
 @pytest.fixture(scope="module")
 def api_server():
@@ -31,9 +31,18 @@ def api_server():
 
     # Start server
     process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"],
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "backend.main:app",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8000",
+        ],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
     )
 
     # Wait for server to start
@@ -58,6 +67,7 @@ def api_server():
 # Mock Data Helpers
 # ============================================================================
 
+
 class MockSlackData:
     """Mock Slack response data based on v0.3 design."""
 
@@ -70,14 +80,8 @@ class MockSlackData:
             "view": {
                 "type": "modal",
                 "callback_id": trigger_id,
-                "title": {
-                    "type": "plain_text",
-                    "text": "ベースコミット管理"
-                },
-                "submit": {
-                    "type": "plain_text",
-                    "text": "送信"
-                },
+                "title": {"type": "plain_text", "text": "ベースコミット管理"},
+                "submit": {"type": "plain_text", "text": "送信"},
                 "blocks": [
                     {
                         "type": "section",
@@ -94,12 +98,9 @@ class MockSlackData:
                         "elements": [
                             {
                                 "type": "button",
-                                "text": {
-                                    "type": "plain_text",
-                                    "text": "+ 追加"
-                                },
+                                "text": {"type": "plain_text", "text": "+ 追加"},
                                 "style": "primary",
-                                "action_id": "commitment_add_row"
+                                "action_id": "commitment_add_row",
                             }
                         ],
                     },
@@ -108,21 +109,18 @@ class MockSlackData:
                         "elements": [
                             {
                                 "type": "mrkdwn",
-                                "text": "コミットは毎日指定時刻にplanイベントとして登録されます"
+                                "text": "コミットは毎日指定時刻にplanイベントとして登録されます",
                             }
                         ],
-                    }
-                ]
-            }
+                    },
+                ],
+            },
         }
 
     @staticmethod
     def command_response(text: str, detail: str = None) -> dict:
         """Generate a command response like Slack would return."""
-        response = {
-            "status": "success",
-            "detail": detail or text
-        }
+        response = {"status": "success", "detail": detail or text}
 
         if detail:
             response["data"] = detail
@@ -135,21 +133,14 @@ class MockSlackData:
         return {
             "status": "success",
             "text": text,
-            "blocks": [
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": text
-                    }
-                }
-            ]
+            "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": text}}],
         }
 
 
 # ============================================================================
 # Slack Signature Helpers
 # ============================================================================
+
 
 def create_slack_signature(timestamp: str, body: bytes, signing_secret: str = "test_secret") -> str:
     """Create a valid Slack signature for testing.
@@ -161,9 +152,7 @@ def create_slack_signature(timestamp: str, body: bytes, signing_secret: str = "t
     basestring = f"v0:{timestamp}:{body.decode() if isinstance(body, bytes) else body}"
 
     expected_hash = hmac.new(
-        signing_secret.encode(),
-        msg=basestring.encode(),
-        digestmod=hashlib.sha256
+        signing_secret.encode(), msg=basestring.encode(), digestmod=hashlib.sha256
     ).hexdigest()
 
     return f"v0={expected_hash}"
@@ -172,6 +161,7 @@ def create_slack_signature(timestamp: str, body: bytes, signing_secret: str = "t
 # ============================================================================
 # Health Check Tests
 # ============================================================================
+
 
 class TestHealthCheck:
     """Test health check endpoint."""
@@ -203,6 +193,7 @@ class TestHealthCheck:
 # Slack Command Tests
 # ============================================================================
 
+
 class TestSlackCommands:
     """Test Slack slash command endpoints.
 
@@ -227,11 +218,8 @@ class TestSlackCommands:
         timestamp = str(int(time.time()))
 
         from urllib.parse import urlencode
-        form_data = {
-            "command": "/base_commit",
-            "user_id": "U03JBLT484",
-            "text": ""
-        }
+
+        form_data = {"command": "/base_commit", "user_id": "U03JBLT484", "text": ""}
 
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
@@ -239,10 +227,7 @@ class TestSlackCommands:
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
 
         assert response.status_code == 200
@@ -274,10 +259,8 @@ class TestSlackCommands:
         timestamp = str(int(time.time()))
 
         from urllib.parse import urlencode
-        form_data = {
-            "command": "/stop",
-            "user_id": "U03JBLT484"
-        }
+
+        form_data = {"command": "/stop", "user_id": "U03JBLT484"}
 
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
@@ -285,10 +268,7 @@ class TestSlackCommands:
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
 
         assert response.status_code == 200
@@ -306,10 +286,8 @@ class TestSlackCommands:
         timestamp = str(int(time.time()))
 
         from urllib.parse import urlencode
-        form_data = {
-            "command": "/restart",
-            "user_id": "U03JBLT484"
-        }
+
+        form_data = {"command": "/restart", "user_id": "U03JBLT484"}
 
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
@@ -317,10 +295,7 @@ class TestSlackCommands:
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
 
         assert response.status_code == 200
@@ -331,6 +306,7 @@ class TestSlackCommands:
 # ============================================================================
 # Slack Signature Validation Tests
 # ============================================================================
+
 
 class TestSlackAPISignatureValidation:
     """Test Slack signature validation independently.
@@ -344,20 +320,16 @@ class TestSlackAPISignatureValidation:
     def test_missing_timestamp_returns_401(self, api_server):
         """Test request without timestamp returns 401."""
         from urllib.parse import urlencode
-        form_data = {
-            "command": "/base_commit",
-            "user_id": "U03JBLT484"
-        }
 
-        body = urlencode(form_data).encode()
+        form_data = {"command": "/base_commit", "user_id": "U03JBLT484"}
+
+        urlencode(form_data).encode()
 
         # Send without timestamp
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Signature": "v0=invalid_signature"
-            }
+            headers={"X-Slack-Signature": "v0=invalid_signature"},
         )
 
         assert response.status_code == 401
@@ -367,20 +339,16 @@ class TestSlackAPISignatureValidation:
         timestamp = str(int(time.time()))
 
         from urllib.parse import urlencode
-        form_data = {
-            "command": "/base_commit",
-            "user_id": "U03JBLT484"
-        }
 
-        body = urlencode(form_data).encode()
+        form_data = {"command": "/base_commit", "user_id": "U03JBLT484"}
+
+        urlencode(form_data).encode()
 
         # Send without signature
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp},
         )
 
         assert response.status_code == 401
@@ -390,10 +358,8 @@ class TestSlackAPISignatureValidation:
         timestamp = str(int(time.time()))
 
         from urllib.parse import urlencode
-        form_data = {
-            "command": "/base_commit",
-            "user_id": "U03JBLT484"
-        }
+
+        form_data = {"command": "/base_commit", "user_id": "U03JBLT484"}
 
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
@@ -401,10 +367,7 @@ class TestSlackAPISignatureValidation:
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
 
         assert response.status_code == 200
@@ -423,6 +386,7 @@ class TestSlackAPISignatureValidation:
 # ============================================================================
 # Internal API Tests
 # ============================================================================
+
 
 class TestInternalAPIValidation:
     """Test internal API validation.
@@ -448,8 +412,7 @@ class TestInternalAPIValidation:
     def test_internal_config_with_secret_succeeds_in_dev_mode(self, api_server):
         """Test /internal/config with secret succeeds in dev mode (returns 401 with 'not configured')."""
         response = requests.get(
-            f"{api_server}/internal/config/TEST_KEY",
-            headers={"X-Internal-Secret": "test_secret"}
+            f"{api_server}/internal/config/TEST_KEY", headers={"X-Internal-Secret": "test_secret"}
         )
 
         assert response.status_code == 401
@@ -460,6 +423,7 @@ class TestInternalAPIValidation:
 # ============================================================================
 # Integration Tests (End-to-End Flow)
 # ============================================================================
+
 
 class TestIntegrationE2E:
     """Integration tests that verify complete user flows.
@@ -484,11 +448,8 @@ class TestIntegrationE2E:
         timestamp = str(int(time.time()))
 
         from urllib.parse import urlencode
-        form_data = {
-            "command": "/base_commit",
-            "user_id": "U03JBLT484",
-            "text": ""
-        }
+
+        form_data = {"command": "/base_commit", "user_id": "U03JBLT484", "text": ""}
 
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
@@ -496,10 +457,7 @@ class TestIntegrationE2E:
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
 
         assert response.status_code == 200

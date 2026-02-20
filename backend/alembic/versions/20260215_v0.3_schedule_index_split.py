@@ -6,17 +6,17 @@ Revision ID: 20260215_v0.3_schedule_index_split
 Revises: 20260214_v0.3_init
 Create Date: 2026-02-15 20:05:00.000000
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260215_v0.3_schedule_index_split"
-down_revision: Union[str, Sequence[str], None] = "20260214_v0.3_init"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "20260214_v0.3_init"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

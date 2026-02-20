@@ -12,9 +12,9 @@ def test_resolve_ignore_interval_minutes_from_user_config(tmp_path):
         connect_args={"check_same_thread": False},
     )
     Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
+    session_factory = sessionmaker(bind=engine)
 
-    session = Session()
+    session = session_factory()
     user_id = "U03JBULT484"
     session.add(
         Configuration(

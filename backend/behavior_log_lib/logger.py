@@ -3,13 +3,14 @@ v0.3 Behavior Logger
 
 Actionログを記録・クエリするモジュール
 """
+
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
 
-from backend.models import ActionLog, ActionResult
+from backend.models import ActionLog, ActionResult, Schedule
 
 
 class BehaviorLogger:
@@ -23,10 +24,7 @@ class BehaviorLogger:
         self.session = db_session
 
     def log_action(
-        self,
-        schedule_id: str,
-        result: ActionResult,
-        created_at: datetime | None = None
+        self, schedule_id: str, result: ActionResult, created_at: datetime | None = None
     ) -> ActionLog:
         """
         アクションを記録
@@ -42,11 +40,7 @@ class BehaviorLogger:
         if created_at is None:
             created_at = datetime.now()
 
-        action_log = ActionLog(
-            schedule_id=schedule_id,
-            result=result,
-            created_at=created_at
-        )
+        action_log = ActionLog(schedule_id=schedule_id, result=result, created_at=created_at)
 
         self.session.add(action_log)
         self.session.commit()
@@ -64,17 +58,16 @@ class BehaviorLogger:
         Returns:
             list[ActionLog]: アクションログリスト（古い順）
         """
-        logs = self.session.query(ActionLog).filter_by(
-            schedule_id=schedule_id
-        ).order_by(ActionLog.created_at.asc()).all()
+        logs = (
+            self.session.query(ActionLog)
+            .filter_by(schedule_id=schedule_id)
+            .order_by(ActionLog.created_at.asc())
+            .all()
+        )
 
         return logs
 
-    def get_recent_logs(
-        self,
-        hours: int = 24,
-        user_id: str | None = None
-    ) -> list[ActionLog]:
+    def get_recent_logs(self, hours: int = 24, user_id: str | None = None) -> list[ActionLog]:
         """
         最近のアクションログを取得
 
@@ -87,13 +80,14 @@ class BehaviorLogger:
         """
         since = datetime.now() - timedelta(hours=hours)
 
-        query = self.session.query(ActionLog).filter(
-            ActionLog.created_at >= since
-        )
+        query = self.session.query(ActionLog).filter(ActionLog.created_at >= since)
 
         if user_id:
-            query = query.join(ActionLog.schedule_id).join(
-                Schedule, Schedule.user_id == user_id
+            query = query.join(
+                Schedule,
+                ActionLog.schedule_id == Schedule.id,
+            ).filter(
+                Schedule.user_id == user_id,
             )
 
         return query.order_by(ActionLog.created_at.desc()).all()
@@ -110,13 +104,18 @@ class BehaviorLogger:
         """
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-        count = self.session.query(func.count(ActionLog.id)).join(ActionLog).filter(
-            and_(
-                ActionLog.schedule_id == schedule_id,
-                ActionLog.result == ActionResult.YES,
-                ActionLog.created_at >= today_start
+        count = (
+            self.session.query(func.count(ActionLog.id))
+            .join(ActionLog)
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule_id,
+                    ActionLog.result == ActionResult.YES,
+                    ActionLog.created_at >= today_start,
+                )
             )
-        ).scalar()
+            .scalar()
+        )
 
         return count or 0
 
@@ -132,13 +131,18 @@ class BehaviorLogger:
         """
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-        count = self.session.query(func.count(ActionLog.id)).join(ActionLog).filter(
-            and_(
-                ActionLog.schedule_id == schedule_id,
-                ActionLog.result == ActionResult.NO,
-                ActionLog.created_at >= today_start
+        count = (
+            self.session.query(func.count(ActionLog.id))
+            .join(ActionLog)
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule_id,
+                    ActionLog.result == ActionResult.NO,
+                    ActionLog.created_at >= today_start,
+                )
             )
-        ).scalar()
+            .scalar()
+        )
 
         return count or 0
 
@@ -152,18 +156,20 @@ class BehaviorLogger:
         Returns:
             int: AUTO_IGNORE回数
         """
-        return self.session.query(func.count(ActionLog.id)).join(ActionLog).filter(
-            and_(
-                ActionLog.schedule_id == schedule_id,
-                ActionLog.result == ActionResult.AUTO_IGNORE
+        return (
+            self.session.query(func.count(ActionLog.id))
+            .join(ActionLog)
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule_id,
+                    ActionLog.result == ActionResult.AUTO_IGNORE,
+                )
             )
-        ).scalar() or 0
+            .scalar()
+            or 0
+        )
 
-    def get_daily_stats(
-        self,
-        schedule_id: str,
-        date: datetime | None = None
-    ) -> dict[str, Any]:
+    def get_daily_stats(self, schedule_id: str, date: datetime | None = None) -> dict[str, Any]:
         """
         1日の統計を取得
 
@@ -179,35 +185,53 @@ class BehaviorLogger:
 
         day_start = datetime.combine(date, datetime.min.time())
 
-        yes_count = self.session.query(func.count(ActionLog.id)).join(ActionLog).filter(
-            and_(
-                ActionLog.schedule_id == schedule_id,
-                ActionLog.result == ActionResult.YES,
-                ActionLog.created_at >= day_start,
-                ActionLog.created_at < day_start + timedelta(days=1)
+        yes_count = (
+            self.session.query(func.count(ActionLog.id))
+            .join(ActionLog)
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule_id,
+                    ActionLog.result == ActionResult.YES,
+                    ActionLog.created_at >= day_start,
+                    ActionLog.created_at < day_start + timedelta(days=1),
+                )
             )
-        ).scalar() or 0
+            .scalar()
+            or 0
+        )
 
-        no_count = self.session.query(func.count(ActionLog.id)).join(ActionLog).filter(
-            and_(
-                ActionLog.schedule_id == schedule_id,
-                ActionLog.result == ActionResult.NO,
-                ActionLog.created_at >= day_start,
-                ActionLog.created_at < day_start + timedelta(days=1)
+        no_count = (
+            self.session.query(func.count(ActionLog.id))
+            .join(ActionLog)
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule_id,
+                    ActionLog.result == ActionResult.NO,
+                    ActionLog.created_at >= day_start,
+                    ActionLog.created_at < day_start + timedelta(days=1),
+                )
             )
-        ).scalar() or 0
+            .scalar()
+            or 0
+        )
 
-        auto_ignore_count = self.session.query(func.count(ActionLog.id)).join(ActionLog).filter(
-            and_(
-                ActionLog.schedule_id == schedule_id,
-                ActionLog.result == ActionResult.AUTO_IGNORE,
-                ActionLog.created_at >= day_start,
-                ActionLog.created_at < day_start + timedelta(days=1)
+        auto_ignore_count = (
+            self.session.query(func.count(ActionLog.id))
+            .join(ActionLog)
+            .filter(
+                and_(
+                    ActionLog.schedule_id == schedule_id,
+                    ActionLog.result == ActionResult.AUTO_IGNORE,
+                    ActionLog.created_at >= day_start,
+                    ActionLog.created_at < day_start + timedelta(days=1),
+                )
             )
-        ).scalar() or 0
+            .scalar()
+            or 0
+        )
 
         return {
             "yes_count": yes_count,
             "no_count": no_count,
-            "auto_ignore_count": auto_ignore_count
+            "auto_ignore_count": auto_ignore_count,
         }

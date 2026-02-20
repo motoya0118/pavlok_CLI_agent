@@ -4,21 +4,21 @@ Revision ID: 20260219_v0.3_schedule_commitment_id
 Revises: 20260215_v0.3_plan_unique_active_only
 Create Date: 2026-02-19 11:10:00.000000
 """
+
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Sequence, Union
 import uuid
+from collections.abc import Sequence
+from datetime import datetime
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260219_v0.3_schedule_commitment_id"
-down_revision: Union[str, Sequence[str], None] = "20260215_v0.3_plan_unique_active_only"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "20260215_v0.3_plan_unique_active_only"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _to_hhmmss(value: object) -> str:
@@ -73,16 +73,20 @@ def upgrade() -> None:
         sa.column("updated_at", sa.DateTime()),
     )
 
-    remind_rows = bind.execute(
-        sa.select(
-            schedules.c.id,
-            schedules.c.user_id,
-            schedules.c.run_at,
-            schedules.c.comment,
-            schedules.c.created_at,
-            schedules.c.updated_at,
-        ).where(sa.func.upper(schedules.c.event_type) == "REMIND")
-    ).mappings().all()
+    remind_rows = (
+        bind.execute(
+            sa.select(
+                schedules.c.id,
+                schedules.c.user_id,
+                schedules.c.run_at,
+                schedules.c.comment,
+                schedules.c.created_at,
+                schedules.c.updated_at,
+            ).where(sa.func.upper(schedules.c.event_type) == "REMIND")
+        )
+        .mappings()
+        .all()
+    )
 
     now = datetime.now()
     for row in remind_rows:

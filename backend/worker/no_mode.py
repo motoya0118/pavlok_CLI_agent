@@ -1,11 +1,12 @@
 """No Mode Detection Module"""
+
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 
-def calculate_no_punishment(no_time: int) -> Dict[str, Any]:
+def calculate_no_punishment(no_time: int) -> dict[str, Any]:
     """
     no回数から罰を計算する
 
@@ -25,7 +26,7 @@ def calculate_no_punishment(no_time: int) -> Dict[str, Any]:
     return {"mode": PunishmentMode.NO, "value": zap_value}
 
 
-def detect_no_mode(session: Session, schedule) -> Dict[str, Any]:
+def detect_no_mode(session: Session, schedule) -> dict[str, Any]:
     """
     no_modeを検知する
 
@@ -36,10 +37,11 @@ def detect_no_mode(session: Session, schedule) -> Dict[str, Any]:
     Returns:
         {"detected": bool, "no_time": int}
     """
-    from backend.models import Punishment, PunishmentMode, ActionLog, ActionResult
+    from backend.models import ActionLog, ActionResult, Punishment, PunishmentMode
 
     # Get TIMEOUT_REMIND (default 600 seconds = 10 minutes)
     from backend.worker.config_cache import get_config
+
     timeout_remind = get_config("TIMEOUT_REMIND", 600)
 
     now = datetime.now()
@@ -53,10 +55,9 @@ def detect_no_mode(session: Session, schedule) -> Dict[str, Any]:
         return {"detected": False, "no_time": 0}
 
     # Check if YES response exists (clears no_mode)
-    yes_log = session.query(ActionLog).filter_by(
-        schedule_id=schedule.id,
-        result=ActionResult.YES
-    ).first()
+    yes_log = (
+        session.query(ActionLog).filter_by(schedule_id=schedule.id, result=ActionResult.YES).first()
+    )
 
     if yes_log:
         return {"detected": False, "no_time": 0}
@@ -65,11 +66,11 @@ def detect_no_mode(session: Session, schedule) -> Dict[str, Any]:
     no_time = elapsed // timeout_remind
 
     # Check if punishment already exists for the same trigger index.
-    existing = session.query(Punishment).filter_by(
-        schedule_id=schedule.id,
-        mode=PunishmentMode.NO,
-        count=no_time
-    ).first()
+    existing = (
+        session.query(Punishment)
+        .filter_by(schedule_id=schedule.id, mode=PunishmentMode.NO, count=no_time)
+        .first()
+    )
 
     if existing:
         return {"detected": True, "no_time": no_time}

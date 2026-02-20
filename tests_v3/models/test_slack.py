@@ -1,6 +1,6 @@
 # v0.3 Slack BlockKit Tests (TDD)
-import pytest
 import json
+
 from backend.slack_lib import BlockKitBuilder
 
 
@@ -26,9 +26,9 @@ class TestBlockKitBuilder:
         assert header["text"]["text"] == "📅 今日の予定を登録しましょう"
 
         mention_sections = [
-            b for b in blocks
-            if b.get("type") == "section"
-            and b.get("text", {}).get("text") == f"<@{user_id}>"
+            b
+            for b in blocks
+            if b.get("type") == "section" and b.get("text", {}).get("text") == f"<@{user_id}>"
         ]
         assert len(mention_sections) == 1
 
@@ -104,7 +104,7 @@ class TestBlockKitBuilder:
             ignore_time=15,
             ignore_count=1,
             stimulation_type="vibe",
-            stimulation_value=100
+            stimulation_value=100,
         )
 
         assert isinstance(blocks, list)
@@ -210,8 +210,7 @@ class TestBlockKitBuilder:
     def test_yes_response_blocks(self):
         """Test YES response blocks after remind"""
         blocks = BlockKitBuilder.yes_response(
-            task_name="朝の瞑想",
-            comment="静かな心は最高の準備です。"
+            task_name="朝の瞑想", comment="静かな心は最高の準備です。"
         )
 
         assert isinstance(blocks, list)
@@ -230,7 +229,7 @@ class TestBlockKitBuilder:
             no_count=2,
             punishment_mode="zap",
             punishment_value=45,
-            comment="明日こそは、一緒に頑張りましょう。"
+            comment="明日こそは、一緒に頑張りましょう。",
         )
 
         assert isinstance(blocks, list)
@@ -258,8 +257,7 @@ class TestBlockKitBuilder:
         next_plan = {"date": "tomorrow", "time": "07:00"}
 
         blocks = BlockKitBuilder.plan_submit_confirmation(
-            scheduled_tasks=scheduled_tasks,
-            next_plan=next_plan
+            scheduled_tasks=scheduled_tasks, next_plan=next_plan
         )
 
         assert isinstance(blocks, list)
@@ -287,7 +285,7 @@ class TestBlockKitBuilder:
             task_name="朝の瞑想",
             task_time="07:00",
             final_punishment_mode="zap",
-            final_punishment_value=100
+            final_punishment_value=100,
         )
 
         assert isinstance(blocks, list)
@@ -303,7 +301,9 @@ class TestBlockKitBuilder:
 
     def test_error_notification_blocks(self):
         """Test error notification blocks"""
-        blocks = BlockKitBuilder.error_notification(error_message="設定の保存中にエラーが発生しました。")
+        blocks = BlockKitBuilder.error_notification(
+            error_message="設定の保存中にエラーが発生しました。"
+        )
 
         assert isinstance(blocks, list)
         assert len(blocks) >= 2  # header + section + actions

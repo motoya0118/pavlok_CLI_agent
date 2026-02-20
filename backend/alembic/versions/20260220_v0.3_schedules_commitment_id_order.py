@@ -4,17 +4,17 @@ Revision ID: 20260220_v0.3_schedules_commitment_id_order
 Revises: 20260219_v0.3_schedule_commitment_id
 Create Date: 2026-02-20 23:30:00.000000
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260220_v0.3_schedules_commitment_id_order"
-down_revision: Union[str, Sequence[str], None] = "20260219_v0.3_schedule_commitment_id"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "20260219_v0.3_schedule_commitment_id"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 CHECK_EVENT_COMMITMENT = (

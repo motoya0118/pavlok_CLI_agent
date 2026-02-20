@@ -1,24 +1,23 @@
 # v0.3 Worker Main Tests
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timedelta
-from backend.worker.worker import PunishmentWorker, main
-from backend.models import Schedule, ScheduleState, EventType
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from backend.models import EventType, Schedule, ScheduleState
+from backend.worker.worker import PunishmentWorker
 
 
 @pytest.mark.asyncio
 class TestPunishmentWorker:
-
     @pytest.mark.asyncio
     async def test_fetch_pending_schedules(self, v3_db_session, v3_test_data_factory):
         """pendingかつrun_at <= nowのスケジュールを取得できること"""
         past_schedule = v3_test_data_factory.create_schedule(
-            run_at=datetime.now() - timedelta(minutes=5),
-            state=ScheduleState.PENDING
+            run_at=datetime.now() - timedelta(minutes=5), state=ScheduleState.PENDING
         )
-        future_schedule = v3_test_data_factory.create_schedule(
-            run_at=datetime.now() + timedelta(minutes=5),
-            state=ScheduleState.PENDING
+        v3_test_data_factory.create_schedule(
+            run_at=datetime.now() + timedelta(minutes=5), state=ScheduleState.PENDING
         )
 
         worker = PunishmentWorker(v3_db_session)
@@ -100,8 +99,7 @@ class TestPunishmentWorker:
     async def test_process_schedule_plan_event(self, v3_db_session, v3_test_data_factory):
         """planイベントは処理後もprocessingで待機すること"""
         schedule = v3_test_data_factory.create_schedule(
-            run_at=datetime.now() - timedelta(minutes=1),
-            state=ScheduleState.PENDING
+            run_at=datetime.now() - timedelta(minutes=1), state=ScheduleState.PENDING
         )
 
         worker = PunishmentWorker(v3_db_session)
@@ -143,7 +141,7 @@ class TestPunishmentWorker:
         schedule = v3_test_data_factory.create_schedule(
             event_type=EventType.REMIND,
             run_at=datetime.now() - timedelta(minutes=1),
-            state=ScheduleState.PENDING
+            state=ScheduleState.PENDING,
         )
 
         worker = PunishmentWorker(v3_db_session)
@@ -156,9 +154,7 @@ class TestPunishmentWorker:
     async def test_process_schedule_failure_retry(self, v3_db_session, v3_test_data_factory):
         """失敗時にretry_countを増やすこと"""
         schedule = v3_test_data_factory.create_schedule(
-            run_at=datetime.now() - timedelta(minutes=1),
-            state=ScheduleState.PENDING,
-            retry_count=0
+            run_at=datetime.now() - timedelta(minutes=1), state=ScheduleState.PENDING, retry_count=0
         )
 
         worker = PunishmentWorker(v3_db_session)
@@ -174,9 +170,7 @@ class TestPunishmentWorker:
     async def test_process_schedule_max_retry_exceeded(self, v3_db_session, v3_test_data_factory):
         """最大リトライ数を超えた場合にfailedのままにすること"""
         schedule = v3_test_data_factory.create_schedule(
-            run_at=datetime.now() - timedelta(minutes=1),
-            state=ScheduleState.PENDING,
-            retry_count=3
+            run_at=datetime.now() - timedelta(minutes=1), state=ScheduleState.PENDING, retry_count=3
         )
 
         worker = PunishmentWorker(v3_db_session)
@@ -203,7 +197,8 @@ class TestPunishmentWorker:
         await worker.monitor_processing_schedules()
 
         # Check if punishment was created
-        from backend.models import Punishment, PunishmentMode
+        from backend.models import Punishment
+
         punishments = v3_db_session.query(Punishment).filter_by(schedule_id=schedule.id).all()
         assert len(punishments) > 0
 
@@ -238,18 +233,13 @@ class TestPunishmentWorker:
             mock_ignore.return_value = {"detected": False, "ignore_time": 0}
             await worker.monitor_processing_schedules()
 
-        monitored_schedule_ids = {
-            str(call.args[1].id)
-            for call in mock_ignore.call_args_list
-        }
+        monitored_schedule_ids = {str(call.args[1].id) for call in mock_ignore.call_args_list}
         assert str(newer.id) in monitored_schedule_ids
         assert str(other_user.id) in monitored_schedule_ids
         assert str(older.id) not in monitored_schedule_ids
 
     @pytest.mark.asyncio
-    async def test_monitor_processing_includes_remind(
-        self, v3_db_session, v3_test_data_factory
-    ):
+    async def test_monitor_processing_includes_remind(self, v3_db_session, v3_test_data_factory):
         """processing監視対象にremindも含まれること"""
         remind_schedule = v3_test_data_factory.create_schedule(
             event_type=EventType.REMIND,
@@ -262,10 +252,7 @@ class TestPunishmentWorker:
             mock_ignore.return_value = {"detected": False, "ignore_time": 0}
             await worker.monitor_processing_schedules()
 
-        monitored_schedule_ids = {
-            str(call.args[1].id)
-            for call in mock_ignore.call_args_list
-        }
+        monitored_schedule_ids = {str(call.args[1].id) for call in mock_ignore.call_args_list}
         assert str(remind_schedule.id) in monitored_schedule_ids
 
     @pytest.mark.asyncio
@@ -280,7 +267,7 @@ class TestPunishmentWorker:
                 raise SystemExit
 
         with patch.object(PunishmentWorker, "run_once", mock_run_once):
-            with patch("asyncio.sleep") as mock_sleep:
+            with patch("asyncio.sleep"):
                 try:
                     worker = PunishmentWorker(v3_db_session)
                     # Run 2 iterations manually
@@ -296,17 +283,17 @@ class TestPunishmentWorker:
         """run_onceは毎回bootstrapチェックを行うこと"""
         worker = PunishmentWorker(v3_db_session)
 
-        with patch(
-            "backend.worker.worker.get_config", return_value=False
-        ), patch.object(
-            worker, "ensure_initial_plan_schedule", new=AsyncMock(return_value=None)
-        ) as mock_bootstrap, patch.object(
-            worker, "fetch_pending_schedules", new=AsyncMock(return_value=[])
-        ) as mock_fetch, patch.object(
-            worker, "process_schedule", new=AsyncMock()
-        ) as mock_process_schedule, patch.object(
-            worker, "monitor_processing_schedules", new=AsyncMock()
-        ) as mock_monitor:
+        with (
+            patch("backend.worker.worker.get_config", return_value=False),
+            patch.object(
+                worker, "ensure_initial_plan_schedule", new=AsyncMock(return_value=None)
+            ) as mock_bootstrap,
+            patch.object(
+                worker, "fetch_pending_schedules", new=AsyncMock(return_value=[])
+            ) as mock_fetch,
+            patch.object(worker, "process_schedule", new=AsyncMock()) as mock_process_schedule,
+            patch.object(worker, "monitor_processing_schedules", new=AsyncMock()) as mock_monitor,
+        ):
             await worker.run_once()
             await worker.run_once()
 
@@ -320,17 +307,15 @@ class TestPunishmentWorker:
         """SYSTEM_PAUSED=trueのとき後続処理を実行しないこと"""
         worker = PunishmentWorker(v3_db_session)
 
-        with patch(
-            "backend.worker.worker.get_config", return_value=True
-        ) as mock_get_config, patch.object(
-            worker, "ensure_initial_plan_schedule", new=AsyncMock()
-        ) as mock_bootstrap, patch.object(
-            worker, "fetch_pending_schedules", new=AsyncMock(return_value=[])
-        ) as mock_fetch, patch.object(
-            worker, "process_schedule", new=AsyncMock()
-        ) as mock_process_schedule, patch.object(
-            worker, "monitor_processing_schedules", new=AsyncMock()
-        ) as mock_monitor:
+        with (
+            patch("backend.worker.worker.get_config", return_value=True) as mock_get_config,
+            patch.object(worker, "ensure_initial_plan_schedule", new=AsyncMock()) as mock_bootstrap,
+            patch.object(
+                worker, "fetch_pending_schedules", new=AsyncMock(return_value=[])
+            ) as mock_fetch,
+            patch.object(worker, "process_schedule", new=AsyncMock()) as mock_process_schedule,
+            patch.object(worker, "monitor_processing_schedules", new=AsyncMock()) as mock_monitor,
+        ):
             await worker.run_once()
 
         assert mock_get_config.call_count == 1
@@ -346,21 +331,21 @@ class TestPunishmentWorker:
         worker = PunishmentWorker(mock_session)
         fake_schedule = MagicMock()
 
-        with patch(
-            "backend.worker.worker.get_config", return_value=False
-        ), patch.object(
-            worker,
-            "ensure_initial_plan_schedule",
-            new=AsyncMock(side_effect=Exception("bootstrap failed")),
-        ) as mock_bootstrap, patch.object(
-            worker,
-            "fetch_pending_schedules",
-            new=AsyncMock(return_value=[fake_schedule]),
-        ) as mock_fetch, patch.object(
-            worker, "process_schedule", new=AsyncMock()
-        ) as mock_process_schedule, patch.object(
-            worker, "monitor_processing_schedules", new=AsyncMock()
-        ) as mock_monitor:
+        with (
+            patch("backend.worker.worker.get_config", return_value=False),
+            patch.object(
+                worker,
+                "ensure_initial_plan_schedule",
+                new=AsyncMock(side_effect=Exception("bootstrap failed")),
+            ) as mock_bootstrap,
+            patch.object(
+                worker,
+                "fetch_pending_schedules",
+                new=AsyncMock(return_value=[fake_schedule]),
+            ) as mock_fetch,
+            patch.object(worker, "process_schedule", new=AsyncMock()) as mock_process_schedule,
+            patch.object(worker, "monitor_processing_schedules", new=AsyncMock()) as mock_monitor,
+        ):
             await worker.run_once()
 
         assert mock_bootstrap.await_count == 1

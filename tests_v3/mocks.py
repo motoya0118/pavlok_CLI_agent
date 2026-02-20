@@ -1,4 +1,5 @@
 """Mock Classes for v0.3 Testing"""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -35,7 +36,9 @@ class MockSlackClient:
     def assert_called(self, method: str, times: int = None):
         calls = self.get_call_history(method)
         if times is not None:
-            assert len(calls) == times, f"{method} should be called {times} times, but was {len(calls)}"
+            assert len(calls) == times, (
+                f"{method} should be called {times} times, but was {len(calls)}"
+            )
         else:
             assert len(calls) > 0, f"{method} should be called at least once"
 
@@ -53,11 +56,15 @@ class MockSlackClient:
         self._next_ts = str(float(ts) + 1)
         return {"ok": True, "ts": ts, "channel": channel}
 
-    def update_message(self, channel: str, ts: str, text: str = None, blocks: list = None, **kwargs) -> dict:
+    def update_message(
+        self, channel: str, ts: str, text: str = None, blocks: list = None, **kwargs
+    ) -> dict:
         self._record_call("update_message", channel, ts, text, blocks, **kwargs)
         return {"ok": True, "ts": ts, "channel": channel}
 
-    def post_ephemeral(self, channel: str, user: str, text: str, blocks: list = None, **kwargs) -> dict:
+    def post_ephemeral(
+        self, channel: str, user: str, text: str, blocks: list = None, **kwargs
+    ) -> dict:
         self._record_call("post_ephemeral", channel, user, text, blocks, **kwargs)
         return {"ok": True}
 
@@ -91,7 +98,9 @@ class MockPavlokClient:
     def assert_called(self, method: str, times: int = None):
         calls = self.get_call_history(method)
         if times is not None:
-            assert len(calls) == times, f"{method} should be called {times} times, but was {len(calls)}"
+            assert len(calls) == times, (
+                f"{method} should be called {times} times, but was {len(calls)}"
+            )
         else:
             assert len(calls) > 0, f"{method} should be called at least once"
 
@@ -121,14 +130,14 @@ class MockPavlokClient:
         self._record_call("stimulate", stimulus_type, value, **kwargs)
         if self._should_fail:
             return {"success": False, "error": "Test failure"}
-        
+
         if stimulus_type == "zap":
             self._zap_count += 1
         elif stimulus_type == "vibe":
             self._vibe_count += 1
         elif stimulus_type == "beep":
             self._beep_count += 1
-        
+
         return {"success": True, "type": stimulus_type, "value": value}
 
     def zap(self, value: int = 50, **kwargs) -> dict:

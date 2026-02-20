@@ -1,29 +1,30 @@
 # v0.3 Internal Protection Middleware Tests
-import pytest
 import os
 from unittest.mock import MagicMock, patch
-from fastapi import Request, HTTPException, status
-from backend.api.internal_protection import verify_internal_request, InternalProtectionError
+
+import pytest
+from fastapi import HTTPException, Request
+
+from backend.api.internal_protection import verify_internal_request
 
 
 @pytest.mark.asyncio
 class TestInternalProtectionMiddleware:
-
     @pytest.mark.asyncio
     async def test_valid_secret_acceptance(self):
         signing_secret = "test-secret"
         with patch.dict(os.environ, {"ONI_INTERNAL_SECRET": signing_secret}):
             request = MagicMock(spec=Request)
             request.url.path = "/internal/api/test"
-            request.headers = {
-                "X-Internal-Secret": signing_secret
-            }
+            request.headers = {"X-Internal-Secret": signing_secret}
 
             # Mock request.json() and body()
             async def mock_json():
                 return {}
+
             async def mock_body():
                 return b"{}"
+
             request.json = mock_json
             request.body = mock_body
 
@@ -36,14 +37,14 @@ class TestInternalProtectionMiddleware:
         with patch.dict(os.environ, {"ONI_INTERNAL_SECRET": signing_secret}):
             request = MagicMock(spec=Request)
             request.url.path = "/internal/api/test"
-            request.headers = {
-                "X-Internal-Secret": "wrong-secret"
-            }
+            request.headers = {"X-Internal-Secret": "wrong-secret"}
 
             async def mock_json():
                 return {}
+
             async def mock_body():
                 return b"{}"
+
             request.json = mock_json
             request.body = mock_body
 
@@ -61,8 +62,10 @@ class TestInternalProtectionMiddleware:
 
             async def mock_json():
                 return {}
+
             async def mock_body():
                 return b"{}"
+
             request.json = mock_json
             request.body = mock_body
 

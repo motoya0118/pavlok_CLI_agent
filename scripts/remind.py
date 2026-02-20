@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 v0.3 Remind Event Script
 
 remindイベント実行：激励メッセージ + YES/NOボタンを投稿
 """
+
 import os
 import sys
 from datetime import datetime
@@ -15,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from backend.slack_lib.blockkit import BlockKitBuilder
@@ -57,11 +60,7 @@ def build_remind_content(session, schedule) -> tuple[str, str, str]:
     commitment_id = str(getattr(schedule, "commitment_id", "") or "").strip()
     commitment = None
     if commitment_id:
-        commitment = (
-            session.query(Commitment)
-            .filter(Commitment.id == commitment_id)
-            .first()
-        )
+        commitment = session.query(Commitment).filter(Commitment.id == commitment_id).first()
 
     if commitment and commitment.task:
         task_name = commitment.task
@@ -80,13 +79,14 @@ def main():
         sys.exit(1)
 
     # Get schedule from database
-    from backend.models import Schedule
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from backend.models import Schedule
+
     engine = create_engine(os.getenv("DATABASE_URL", "sqlite:///oni.db"))
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
 
     try:
         schedule = session.query(Schedule).filter_by(id=schedule_id).first()

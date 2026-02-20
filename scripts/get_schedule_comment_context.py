@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 Fetch schedule/action context for add_comment prompt generation.
 """
+
 import json
 import os
 import sys
@@ -51,8 +53,8 @@ def main() -> None:
         sys.exit(1)
 
     engine = create_engine(os.getenv("DATABASE_URL", "sqlite:///oni.db"))
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
 
     try:
         rows = (
@@ -85,9 +87,7 @@ def main() -> None:
                     {
                         "schedule_id": action.schedule_id,
                         "result": str(action.result),
-                        "created_at": action.created_at.isoformat()
-                        if action.created_at
-                        else None,
+                        "created_at": action.created_at.isoformat() if action.created_at else None,
                         "event_type": str(schedule.event_type),
                         "task_hint": schedule.comment,
                         "run_at": schedule.run_at.isoformat() if schedule.run_at else None,

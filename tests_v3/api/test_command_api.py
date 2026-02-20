@@ -1,35 +1,36 @@
 # v0.3 Slack Command API Tests
 import json
-import pytest
-from unittest.mock import MagicMock
 from datetime import datetime, timedelta
-from fastapi import Request, HTTPException, status
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi import Request
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from backend.api.command import (
     process_base_commit,
-    process_plan,
-    process_stop,
-    process_restart,
+    process_config,
     process_help,
-    process_config
+    process_plan,
+    process_restart,
+    process_stop,
 )
 from backend.models import (
-    Schedule,
     Base,
     Commitment,
     Configuration,
     ConfigValueType,
     EventType,
+    Schedule,
     ScheduleState,
 )
 
 
 @pytest.mark.asyncio
 class TestCommandApi:
-
     async def test_base_commit_command(self, v3_db_session, v3_test_data_factory):
-        schedule = v3_test_data_factory.create_schedule()
+        v3_test_data_factory.create_schedule()
         request = MagicMock(spec=Request)
         request.state = "base_commit"
 
@@ -43,9 +44,9 @@ class TestCommandApi:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-        session = Session()
+        session = session_factory()
         try:
             session.add_all(
                 [
@@ -104,9 +105,9 @@ class TestCommandApi:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-        session = Session()
+        session = session_factory()
         try:
             now = datetime.now().replace(second=0, microsecond=0)
             morning = Commitment(user_id="U_TEST", task="朝", time="07:00:00", active=True)
@@ -219,7 +220,7 @@ class TestCommandApi:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.command._SESSION_FACTORY", None)
@@ -229,13 +230,9 @@ class TestCommandApi:
         assert result["status"] == "success"
         assert "blocks" in result
 
-        session = Session()
+        session = session_factory()
         try:
-            row = (
-                session.query(Configuration)
-                .filter(Configuration.key == "SYSTEM_PAUSED")
-                .first()
-            )
+            row = session.query(Configuration).filter(Configuration.key == "SYSTEM_PAUSED").first()
             assert row is not None
             assert row.value == "true"
             assert row.value_type == ConfigValueType.BOOL
@@ -248,13 +245,13 @@ class TestCommandApi:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.command._SESSION_FACTORY", None)
         monkeypatch.setattr("backend.api.command._SESSION_DB_URL", None)
 
-        session = Session()
+        session = session_factory()
         try:
             session.add(
                 Configuration(
@@ -273,13 +270,9 @@ class TestCommandApi:
         assert result["status"] == "success"
         assert "blocks" in result
 
-        session = Session()
+        session = session_factory()
         try:
-            row = (
-                session.query(Configuration)
-                .filter(Configuration.key == "SYSTEM_PAUSED")
-                .first()
-            )
+            row = session.query(Configuration).filter(Configuration.key == "SYSTEM_PAUSED").first()
             assert row is not None
             assert row.value == "false"
             assert row.value_type == ConfigValueType.BOOL
@@ -308,10 +301,7 @@ class TestCommandApi:
 
     @pytest.mark.asyncio
     async def test_config_post_command(self, v3_db_session):
-        config_data = {
-            "PAVLOK_TYPE_PUNISH": "vibe",
-            "PAVLOK_VALUE_PUNISH": "100"
-        }
+        config_data = {"PAVLOK_TYPE_PUNISH": "vibe", "PAVLOK_VALUE_PUNISH": "100"}
 
         request = MagicMock(spec=Request)
         request.method = "POST"
@@ -326,9 +316,9 @@ class TestCommandApi:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-        session = Session()
+        session = session_factory()
         try:
             session.add(
                 Configuration(
@@ -379,7 +369,7 @@ class TestCommandApi:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.command._SESSION_FACTORY", None)
@@ -406,7 +396,7 @@ class TestCommandApi:
         result = await process_config(payload)
         assert result["response_action"] == "clear"
 
-        session = Session()
+        session = session_factory()
         try:
             row = (
                 session.query(Configuration)
@@ -427,7 +417,7 @@ class TestCommandApi:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
         monkeypatch.setenv("DATABASE_URL", database_url)
         monkeypatch.setattr("backend.api.command._SESSION_FACTORY", None)
@@ -460,13 +450,9 @@ class TestCommandApi:
         result = await process_config(payload)
         assert result["response_action"] == "clear"
 
-        session = Session()
+        session = session_factory()
         try:
-            rows = (
-                session.query(Configuration)
-                .filter(Configuration.user_id == "U_TEST")
-                .all()
-            )
+            rows = session.query(Configuration).filter(Configuration.user_id == "U_TEST").all()
             config_map = {row.key: row.value for row in rows}
             assert config_map["PAVLOK_TYPE_NOTION"] == "beep"
             assert config_map["PAVLOK_VALUE_NOTION"] == "80"

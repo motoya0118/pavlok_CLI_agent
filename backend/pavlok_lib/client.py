@@ -4,12 +4,13 @@ v0.3 Pavlok API Client
 Pavlokデバイス刺激APIクライアント
 https://pavlok-eu.readme.io/docs/api_reference.html
 """
+
 import os
 from typing import Any
+
 import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 
 _SESSION_FACTORY = None
 _SESSION_DB_URL = None
@@ -232,10 +233,7 @@ class PavlokClient:
     VALID_STIMULUS_TYPES = ("zap", "beep", "vibe")
 
     def __init__(
-        self,
-        api_key: str | None = None,
-        api_base: str | None = None,
-        http_client: Any = None
+        self, api_key: str | None = None, api_base: str | None = None, http_client: Any = None
     ):
         """
         Args:
@@ -249,8 +247,7 @@ class PavlokClient:
 
         if not self.api_key:
             raise ValueError(
-                "PAVLOK_API_KEY is not set. "
-                "Provide api_key parameter or set environment variable."
+                "PAVLOK_API_KEY is not set. Provide api_key parameter or set environment variable."
             )
 
     def _get_headers(self) -> dict[str, str]:
@@ -258,25 +255,16 @@ class PavlokClient:
         return {
             "accept": "application/json",
             "content-type": "application/json",
-            "authorization": f"Bearer {self.api_key}"
+            "authorization": f"Bearer {self.api_key}",
         }
 
     def _post(self, url: str, payload: dict) -> requests.Response:
         """API POSTリクエストを実行"""
-        return self.http_client.post(
-            url,
-            json=payload,
-            headers=self._get_headers(),
-            timeout=10
-        )
+        return self.http_client.post(url, json=payload, headers=self._get_headers(), timeout=10)
 
     def _get(self, url: str) -> requests.Response:
         """API GETリクエストを実行"""
-        return self.http_client.get(
-            url,
-            headers=self._get_headers(),
-            timeout=10
-        )
+        return self.http_client.get(url, headers=self._get_headers(), timeout=10)
 
     def _validate_stimulus_type(self, stimulus_type: str) -> None:
         """刺激タイプのバリデーション"""
@@ -292,11 +280,7 @@ class PavlokClient:
             raise ValueError(f"Value must be between 0 and 100, got: {value}")
 
     def stimulate(
-        self,
-        stimulus_type: str,
-        value: int = 50,
-        reason: str = "",
-        **kwargs
+        self, stimulus_type: str, value: int = 50, reason: str = "", **kwargs
     ) -> dict[str, Any]:
         """
         刺激を送信
@@ -313,12 +297,7 @@ class PavlokClient:
         self._validate_value(value)
 
         url = f"{self.api_base}/stimulus/send"
-        payload = {
-            "stimulus": {
-                "stimulusType": stimulus_type,
-                "stimulusValue": value
-            }
-        }
+        payload = {"stimulus": {"stimulusType": stimulus_type, "stimulusValue": value}}
         if isinstance(reason, str) and reason.strip():
             payload["stimulus"]["reason"] = reason.strip()
 
@@ -331,7 +310,7 @@ class PavlokClient:
                 "type": stimulus_type,
                 "value": value,
                 "reason": reason.strip() if isinstance(reason, str) else "",
-                "raw": data
+                "raw": data,
             }
         except Exception as e:
             return {
@@ -339,7 +318,7 @@ class PavlokClient:
                 "type": stimulus_type,
                 "value": value,
                 "reason": reason.strip() if isinstance(reason, str) else "",
-                "error": str(e)
+                "error": str(e),
             }
 
     def zap(self, value: int = 50, **kwargs) -> dict[str, Any]:
@@ -370,10 +349,7 @@ class PavlokClient:
                 "success": True,
                 "battery": data.get("battery", 0),
                 "is_charging": data.get("isCharging", False),
-                "raw": data
+                "raw": data,
             }
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}

@@ -2,10 +2,10 @@
 # TDD development fixtures and configuration
 import os
 import sys
-from pathlib import Path
-from typing import Generator
-from uuid import uuid4
+from collections.abc import Generator
 from datetime import datetime, timedelta
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine
@@ -24,15 +24,14 @@ os.environ.setdefault("TIMEZONE", "Asia/Tokyo")
 # v0.3 DB Fixtures
 # ============================================================================
 
+
 @pytest.fixture()
 def v3_db_engine():
     """In-memory SQLite engine for v0.3 models."""
     from backend.models import Base
 
     engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        future=True
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, future=True
     )
     Base.metadata.create_all(bind=engine)
     yield engine
@@ -42,11 +41,7 @@ def v3_db_engine():
 @pytest.fixture()
 def v3_db_session(v3_db_engine) -> Generator:
     """DB session for v0.3 models."""
-    session_factory = sessionmaker(
-        bind=v3_db_engine,
-        autoflush=False,
-        expire_on_commit=False
-    )
+    session_factory = sessionmaker(bind=v3_db_engine, autoflush=False, expire_on_commit=False)
     session = session_factory()
     try:
         yield session
@@ -65,8 +60,16 @@ def v3_test_user_id() -> str:
 def v3_test_data_factory(v3_db_session, v3_test_user_id):
     """Helper class for creating v0.3 test data."""
     from backend.models import (
-        Commitment, Schedule, ActionLog, Punishment, Configuration,
-        ScheduleState, EventType, ActionResult, PunishmentMode, ConfigValueType,
+        ActionLog,
+        ActionResult,
+        Commitment,
+        Configuration,
+        ConfigValueType,
+        EventType,
+        Punishment,
+        PunishmentMode,
+        Schedule,
+        ScheduleState,
     )
 
     class TestDataFactory:
@@ -209,10 +212,12 @@ def v3_test_data_factory(v3_db_session, v3_test_user_id):
 # v0.3 Mock Fixtures
 # ============================================================================
 
+
 @pytest.fixture()
 def mock_slack_client():
     """Advanced SlackClient mock with call recording."""
     from tests_v3.mocks import MockSlackClient
+
     return MockSlackClient()
 
 
@@ -220,6 +225,7 @@ def mock_slack_client():
 def mock_pavlok_client():
     """Advanced PavlokClient mock with call recording."""
     from tests_v3.mocks import MockPavlokClient
+
     return MockPavlokClient()
 
 
@@ -227,12 +233,14 @@ def mock_pavlok_client():
 def mock_agent_client():
     """Agent (Claude/codex) mock with call recording."""
     from tests_v3.mocks import MockAgentClient
+
     return MockAgentClient()
 
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
 
 @pytest.fixture()
 def assert_schedule_state():

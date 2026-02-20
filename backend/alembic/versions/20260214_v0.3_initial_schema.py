@@ -7,54 +7,42 @@ Revises:
 Create Date: 2026-02-14 20:30:00.000000
 
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260214_v0.3_init"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     # Enums
     schedule_state_enum = sa.Enum(
-        "pending", "processing", "done", "skipped", "failed", "canceled",
-        name="schedule_state_enum"
+        "pending", "processing", "done", "skipped", "failed", "canceled", name="schedule_state_enum"
     )
     schedule_state_enum.create(op.get_bind(), checkfirst=False)
 
-    event_type_enum = sa.Enum(
-        "plan", "remind",
-        name="event_type_enum"
-    )
+    event_type_enum = sa.Enum("plan", "remind", name="event_type_enum")
     event_type_enum.create(op.get_bind(), checkfirst=False)
 
-    action_result_enum = sa.Enum(
-        "YES", "NO", "AUTO_IGNORE",
-        name="action_result_enum"
-    )
+    action_result_enum = sa.Enum("YES", "NO", "AUTO_IGNORE", name="action_result_enum")
     action_result_enum.create(op.get_bind(), checkfirst=False)
 
-    punishment_mode_enum = sa.Enum(
-        "ignore", "no",
-        name="punishment_mode_enum"
-    )
+    punishment_mode_enum = sa.Enum("ignore", "no", name="punishment_mode_enum")
     punishment_mode_enum.create(op.get_bind(), checkfirst=False)
 
     config_value_type_enum = sa.Enum(
-        "int", "float", "str", "json", "bool",
-        name="config_value_type_enum"
+        "int", "float", "str", "json", "bool", name="config_value_type_enum"
     )
     config_value_type_enum.create(op.get_bind(), checkfirst=False)
 
     change_source_enum = sa.Enum(
-        "slack_command", "rollback", "reset", "migration",
-        name="change_source_enum"
+        "slack_command", "rollback", "reset", "migration", name="change_source_enum"
     )
     change_source_enum.create(op.get_bind(), checkfirst=False)
 

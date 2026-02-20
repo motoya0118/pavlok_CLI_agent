@@ -1,15 +1,15 @@
 # v0.3 Pavlok Client Tests (TDD)
-import pytest
 from datetime import datetime
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from backend.models import Base, Configuration, ConfigValueType
-from backend.models import EventType, Schedule, ScheduleState
+from backend.models import Base, Configuration, ConfigValueType, EventType, Schedule, ScheduleState
 from backend.pavlok_lib import (
     PavlokClient,
-    stimulate_notification_for_user,
     build_reason_for_schedule_id,
+    stimulate_notification_for_user,
 )
 
 
@@ -41,9 +41,11 @@ class TestPavlokClientValidation:
 
     def test_custom_http_client(self):
         """Test custom HTTP client injection"""
+
         class MockHTTP:
             def post(self, *args, **kwargs):
                 pass
+
             def get(self, *args, **kwargs):
                 pass
 
@@ -105,10 +107,13 @@ class TestPavlokClientWithMock:
 
     def test_stimulate_zap_success(self):
         """Test zap stimulation with mock"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
             def raise_for_status(self):
                 pass
 
@@ -125,10 +130,13 @@ class TestPavlokClientWithMock:
 
     def test_stimulate_vibe_success(self):
         """Test vibe stimulation with mock"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
             def raise_for_status(self):
                 pass
 
@@ -145,10 +153,13 @@ class TestPavlokClientWithMock:
 
     def test_stimulate_beep_success(self):
         """Test beep stimulation with mock"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
             def raise_for_status(self):
                 pass
 
@@ -165,10 +176,13 @@ class TestPavlokClientWithMock:
 
     def test_stimulate_default_value(self):
         """Test stimulate with default value (50)"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
             def raise_for_status(self):
                 pass
 
@@ -213,10 +227,13 @@ class TestPavlokClientWithMock:
 
     def test_zap_method(self):
         """Test convenience zap method"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
             def raise_for_status(self):
                 pass
 
@@ -233,10 +250,13 @@ class TestPavlokClientWithMock:
 
     def test_vibe_method(self):
         """Test convenience vibe method"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
             def raise_for_status(self):
                 pass
 
@@ -253,10 +273,13 @@ class TestPavlokClientWithMock:
 
     def test_beep_method(self):
         """Test convenience beep method"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"status": "ok"}
+
             def raise_for_status(self):
                 pass
 
@@ -273,6 +296,7 @@ class TestPavlokClientWithMock:
 
     def test_api_error_handling(self):
         """Test API error handling"""
+
         class MockResponse:
             status_code = 401
 
@@ -289,10 +313,13 @@ class TestPavlokClientWithMock:
 
     def test_get_status_success(self):
         """Test get_status method with mock"""
+
         class MockResponse:
             status_code = 200
+
             def json(self):
                 return {"battery": 85, "is_charging": False}
+
             def raise_for_status(self):
                 pass
 
@@ -309,6 +336,7 @@ class TestPavlokClientWithMock:
 
     def test_get_status_error_handling(self):
         """Test get_status error handling"""
+
         class MockResponse:
             status_code = 500
 
@@ -370,9 +398,9 @@ class TestNotificationStimulusConfig:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-        session = Session()
+        session = session_factory()
         try:
             session.add_all(
                 [
@@ -432,9 +460,9 @@ class TestNotificationStimulusConfig:
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-        session = Session()
+        session = session_factory()
         try:
             user_id = "U_TEST"
             session.add(

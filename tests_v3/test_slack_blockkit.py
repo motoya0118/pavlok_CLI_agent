@@ -4,7 +4,7 @@ v0.3 BlockKit UI Tests
 Tests for BlockKit JSON generation for Slack UI components.
 Following TDD: Red -> Green -> Refactor
 """
-import pytest
+
 from datetime import datetime
 
 
@@ -73,8 +73,7 @@ class TestBlockKitBaseCommit:
 
         modal = base_commit_modal([])
         task_blocks = [
-            b for b in modal["blocks"]
-            if b.get("block_id", "").startswith("commitment_")
+            b for b in modal["blocks"] if b.get("block_id", "").startswith("commitment_")
         ]
         assert len(task_blocks) >= 3
         for block in task_blocks:
@@ -118,9 +117,7 @@ class TestBlockKitStopRestart:
         assert "/help" in blocks[0]["text"]["text"]
 
         text_blob = "\n".join(
-            b.get("text", {}).get("text", "")
-            for b in blocks
-            if b.get("type") == "section"
+            b.get("text", {}).get("text", "") for b in blocks if b.get("type") == "section"
         )
         assert "/base_commit" in text_blob
         assert "/plan" in text_blob
@@ -184,34 +181,26 @@ class TestBlockKitConfig:
         blocks = modal["blocks"]
 
         # Find PAVLOK_TYPE_PUNISH block
-        type_block = next(
-            (b for b in blocks if b.get("block_id") == "PAVLOK_TYPE_PUNISH"),
-            None
-        )
+        type_block = next((b for b in blocks if b.get("block_id") == "PAVLOK_TYPE_PUNISH"), None)
         assert type_block is not None
         # Should have initial_option with vibe selected
         element = type_block["element"]
         assert element["action_id"] == "PAVLOK_TYPE_PUNISH_select"
 
         # Find PAVLOK_VALUE_PUNISH block
-        value_block = next(
-            (b for b in blocks if b.get("block_id") == "PAVLOK_VALUE_PUNISH"),
-            None
-        )
+        value_block = next((b for b in blocks if b.get("block_id") == "PAVLOK_VALUE_PUNISH"), None)
         assert value_block is not None
         assert value_block["element"]["initial_value"] == "70"
 
         notion_type_block = next(
-            (b for b in blocks if b.get("block_id") == "PAVLOK_TYPE_NOTION"),
-            None
+            (b for b in blocks if b.get("block_id") == "PAVLOK_TYPE_NOTION"), None
         )
         assert notion_type_block is not None
         assert notion_type_block["element"]["action_id"] == "PAVLOK_TYPE_NOTION_select"
         assert notion_type_block["element"]["initial_option"]["value"] == "beep"
 
         notion_value_block = next(
-            (b for b in blocks if b.get("block_id") == "PAVLOK_VALUE_NOTION"),
-            None
+            (b for b in blocks if b.get("block_id") == "PAVLOK_VALUE_NOTION"), None
         )
         assert notion_value_block is not None
         assert notion_value_block["element"]["initial_value"] == "80"
@@ -225,7 +214,9 @@ class TestBlockKitConfig:
 
         assert block_ids.index("PAVLOK_TYPE_PUNISH") < block_ids.index("PAVLOK_VALUE_PUNISH")
         assert block_ids.index("PAVLOK_VALUE_PUNISH") < block_ids.index("LIMIT_DAY_PAVLOK_COUNTS")
-        assert block_ids.index("LIMIT_DAY_PAVLOK_COUNTS") < block_ids.index("LIMIT_PAVLOK_ZAP_VALUE")
+        assert block_ids.index("LIMIT_DAY_PAVLOK_COUNTS") < block_ids.index(
+            "LIMIT_PAVLOK_ZAP_VALUE"
+        )
         assert block_ids.index("LIMIT_PAVLOK_ZAP_VALUE") < block_ids.index("PAVLOK_TYPE_NOTION")
         assert block_ids.index("PAVLOK_TYPE_NOTION") < block_ids.index("PAVLOK_VALUE_NOTION")
 
@@ -316,9 +307,9 @@ class TestBlockKitPlan:
         assert "📅" in blocks[0]["text"]["text"]
 
         mention_sections = [
-            b for b in blocks
-            if b.get("type") == "section"
-            and b.get("text", {}).get("text") == f"<@{user_id}>"
+            b
+            for b in blocks
+            if b.get("type") == "section" and b.get("text", {}).get("text") == f"<@{user_id}>"
         ]
         assert len(mention_sections) == 1
 
@@ -465,7 +456,9 @@ class TestBlockKitIgnore:
         ignore_minutes = 15
         punishment = {"type": "vibe", "value": 100}
 
-        blocks = ignore_detection_post(schedule_id, task_name, task_time, ignore_minutes, punishment)
+        blocks = ignore_detection_post(
+            schedule_id, task_name, task_time, ignore_minutes, punishment
+        )
 
         assert isinstance(blocks, list)
         assert blocks[0]["type"] == "header"

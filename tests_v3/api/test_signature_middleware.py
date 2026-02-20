@@ -1,16 +1,19 @@
 # v0.3 Slack Signature Verification Middleware Tests
-import pytest
 import hashlib
 import hmac
 import os
-from unittest.mock import MagicMock, patch, AsyncMock
-from fastapi import Request, HTTPException, status
-from backend.api.signature import verify_slack_signature, SignatureVerificationError, verify_signature_middleware
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi import HTTPException, Request
+
+from backend.api.signature import (
+    verify_signature_middleware,
+)
 
 
 @pytest.mark.asyncio
 class TestSignatureMiddleware:
-
     @pytest.mark.asyncio
     async def test_valid_signature_verification(self):
         timestamp = "1531420620005"
@@ -20,9 +23,7 @@ class TestSignatureMiddleware:
         # Slack公式フォーマット: v0:timestamp:body
         sig_basestring = f"v0:{timestamp}:{body.decode()}"
         expected_hash = hmac.new(
-            signing_secret.encode(),
-            msg=sig_basestring.encode(),
-            digestmod=hashlib.sha256
+            signing_secret.encode(), msg=sig_basestring.encode(), digestmod=hashlib.sha256
         ).hexdigest()
         signature = f"v0={expected_hash}"
 
@@ -31,17 +32,19 @@ class TestSignatureMiddleware:
             request.url.path = "/api/test"
             request.headers = {
                 "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
+                "X-Slack-Signature": signature,
             }
 
             # Mock body() method to return bytes
             async def mock_body():
                 return body
+
             request.body = mock_body
 
             # Mock call_next properly
             async def mock_call_next(req):
                 return MagicMock()
+
             call_next = AsyncMock()
             call_next.side_effect = mock_call_next
 
@@ -59,15 +62,17 @@ class TestSignatureMiddleware:
             request.url.path = "/api/test"
             request.headers = {
                 "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
+                "X-Slack-Signature": signature,
             }
 
             async def mock_body():
                 return b"test_body"
+
             request.body = mock_body
 
             async def mock_call_next(req):
                 return MagicMock()
+
             call_next = AsyncMock()
             call_next.side_effect = mock_call_next
 
@@ -90,10 +95,12 @@ class TestSignatureMiddleware:
 
             async def mock_body():
                 return b"test_body"
+
             request.body = mock_body
 
             async def mock_call_next(req):
                 return MagicMock()
+
             call_next = AsyncMock()
             call_next.side_effect = mock_call_next
 

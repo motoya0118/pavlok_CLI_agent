@@ -6,20 +6,21 @@ Run with: pytest -v -m e2e tests_v3/test_api_e2e.py
 Start server before running:
   uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 """
-import pytest
-import subprocess
-import time
-import json
-import hmac
-import hashlib
-import requests
-import os
-import sys
 
+import hashlib
+import hmac
+import os
+import subprocess
+import sys
+import time
+
+import pytest
+import requests
 
 # ============================================================================
 # Test Server Management
 # ============================================================================
+
 
 @pytest.fixture(scope="module")
 def api_server():
@@ -33,9 +34,18 @@ def api_server():
 
     # Start server
     process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"],
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "backend.main:app",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8000",
+        ],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
     )
 
     # Wait for server to start
@@ -60,6 +70,7 @@ def api_server():
 # Slack Signature Helper
 # ============================================================================
 
+
 def create_slack_signature(timestamp: str, body: bytes, signing_secret: str = "test_secret") -> str:
     """Create a valid Slack signature for testing.
 
@@ -70,9 +81,7 @@ def create_slack_signature(timestamp: str, body: bytes, signing_secret: str = "t
     basestring = f"v0:{timestamp}:{body.decode() if isinstance(body, bytes) else body}"
 
     expected_hash = hmac.new(
-        signing_secret.encode(),
-        msg=basestring.encode(),
-        digestmod=hashlib.sha256
+        signing_secret.encode(), msg=basestring.encode(), digestmod=hashlib.sha256
     ).hexdigest()
 
     return f"v0={expected_hash}"
@@ -81,6 +90,7 @@ def create_slack_signature(timestamp: str, body: bytes, signing_secret: str = "t
 # ============================================================================
 # Health Check Tests (Normal Flow)
 # ============================================================================
+
 
 class TestHealthCheck:
     """Test health check endpoint - critical for monitoring."""
@@ -110,28 +120,23 @@ class TestHealthCheck:
 # Slack Command Tests (Normal Flow)
 # ============================================================================
 
+
 class TestSlackCommand:
     """Test Slack slash command endpoints."""
 
     def test_base_commit_command(self, api_server):
         """Test /base_commit command returns modal with valid signature."""
         from urllib.parse import urlencode
+
         timestamp = str(int(time.time()))
-        form_data = {
-            "command": "/base_commit",
-            "user_id": "U03JBULT484",
-            "text": ""
-        }
+        form_data = {"command": "/base_commit", "user_id": "U03JBULT484", "text": ""}
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
 
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
         assert response.status_code == 200
         data = response.json()
@@ -140,22 +145,16 @@ class TestSlackCommand:
     def test_stop_command(self, api_server):
         """Test /stop command with valid signature."""
         from urllib.parse import urlencode
+
         timestamp = str(int(time.time()))
-        form_data = {
-            "command": "/stop",
-            "user_id": "U03JBULT484",
-            "text": ""
-        }
+        form_data = {"command": "/stop", "user_id": "U03JBULT484", "text": ""}
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
 
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
         assert response.status_code == 200
         data = response.json()
@@ -164,22 +163,16 @@ class TestSlackCommand:
     def test_restart_command(self, api_server):
         """Test /restart command with valid signature."""
         from urllib.parse import urlencode
+
         timestamp = str(int(time.time()))
-        form_data = {
-            "command": "/restart",
-            "user_id": "U03JBULT484",
-            "text": ""
-        }
+        form_data = {"command": "/restart", "user_id": "U03JBULT484", "text": ""}
         body = urlencode(form_data).encode()
         signature = create_slack_signature(timestamp, body)
 
         response = requests.post(
             f"{api_server}/slack/command",
             data=form_data,
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
         assert response.status_code == 200
         data = response.json()
@@ -190,6 +183,7 @@ class TestSlackCommand:
 # Internal API Tests (Normal Flow)
 # ============================================================================
 
+
 class TestInternalAPI:
     """Test internal endpoints for Worker communication."""
 
@@ -197,7 +191,7 @@ class TestInternalAPI:
         """Test /internal/execute/plan endpoint with valid secret."""
         response = requests.post(
             f"{api_server}/internal/execute/plan",
-            headers={"X-Internal-Secret": "test_internal_secret"}
+            headers={"X-Internal-Secret": "test_internal_secret"},
         )
         # Should return 200 with valid secret
         assert response.status_code == 200
@@ -209,7 +203,7 @@ class TestInternalAPI:
         """Test /internal/execute/remind endpoint with valid secret."""
         response = requests.post(
             f"{api_server}/internal/execute/remind",
-            headers={"X-Internal-Secret": "test_internal_secret"}
+            headers={"X-Internal-Secret": "test_internal_secret"},
         )
         # Should return 200 with valid secret
         assert response.status_code == 200
@@ -221,7 +215,7 @@ class TestInternalAPI:
         """Test /internal/config/{key} endpoint with valid secret."""
         response = requests.get(
             f"{api_server}/internal/config/PAVLOK_VALUE_PUNISH",
-            headers={"X-Internal-Secret": "test_internal_secret"}
+            headers={"X-Internal-Secret": "test_internal_secret"},
         )
         # Should return 200 with valid secret
         assert response.status_code == 200
@@ -232,6 +226,7 @@ class TestInternalAPI:
 # ============================================================================
 # Error Handling Tests
 # ============================================================================
+
 
 class TestErrorHandling:
     """Test error handling."""
@@ -244,7 +239,6 @@ class TestErrorHandling:
     def test_invalid_json_returns_400_or_401(self, api_server):
         """Test that invalid payload returns error."""
         timestamp = str(int(time.time()))
-        from urllib.parse import urlencode
 
         # Create a request with invalid payload
         body = b"payload=invalid_json"
@@ -253,10 +247,7 @@ class TestErrorHandling:
         response = requests.post(
             f"{api_server}/slack/interactive",
             data={"payload": "invalid_json"},
-            headers={
-                "X-Slack-Request-Timestamp": timestamp,
-                "X-Slack-Signature": signature
-            }
+            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
         )
         # Should return 400 (bad request) or handle gracefully
         assert response.status_code in [400, 500]
@@ -265,6 +256,7 @@ class TestErrorHandling:
 # ============================================================================
 # Manual Test Script
 # ============================================================================
+
 
 def run_manual_tests(base_url="http://localhost:8000"):
     """Run manual tests against running server."""
@@ -290,7 +282,7 @@ def run_manual_tests(base_url="http://localhost:8000"):
         data = response.json()
         assert data["status"] == "ok"
         assert data["version"] == "0.3.0"
-        print(f"  Status: ok")
+        print("  Status: ok")
         print(f"  Version: {data['version']}")
         print("  ✓ PASSED")
     except Exception as e:
@@ -309,10 +301,7 @@ def run_manual_tests(base_url="http://localhost:8000"):
     # Test 4: Slack command without signature
     print("\n[Test 4] Slack command without signature returns 401")
     try:
-        response = requests.post(
-            f"{base_url}/slack/command",
-            data={"command": "/base_commit"}
-        )
+        response = requests.post(f"{base_url}/slack/command", data={"command": "/base_commit"})
         assert response.status_code == 401
         print(f"  Status: {response.status_code}")
         print("  ✓ PASSED")
@@ -336,5 +325,6 @@ def run_manual_tests(base_url="http://localhost:8000"):
 
 if __name__ == "__main__":
     import sys
+
     base_url = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
     run_manual_tests(base_url)

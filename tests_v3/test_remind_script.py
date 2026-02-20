@@ -22,9 +22,9 @@ def test_build_remind_content_resolves_task_by_commitment_id(tmp_path):
         connect_args={"check_same_thread": False},
     )
     Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
+    session_factory = sessionmaker(bind=engine)
 
-    session = Session()
+    session = session_factory()
     user_id = "U03JBULT484"
     morning = Commitment(user_id=user_id, task="ジム行く", time="07:00:00", active=True)
     night = Commitment(user_id=user_id, task="スマホ置いて寝る", time="21:00:00", active=True)
@@ -58,9 +58,9 @@ def test_resolve_ignore_interval_minutes_from_user_config(tmp_path):
         connect_args={"check_same_thread": False},
     )
     Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
+    session_factory = sessionmaker(bind=engine)
 
-    session = Session()
+    session = session_factory()
     user_id = "U03JBULT484"
     session.add(
         Configuration(

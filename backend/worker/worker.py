@@ -1,18 +1,17 @@
 """Punishment Worker Main Module"""
+
 import asyncio
+import logging
 import os
 import sys
-import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+
 from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from backend.worker.config_cache import get_config, invalidate_config_cache
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class PunishmentWorker:
             return value.strip().lower() in {"1", "true", "yes", "on"}
         return False
 
-    def _resolve_bootstrap_user_id(self) -> Optional[str]:
+    def _resolve_bootstrap_user_id(self) -> str | None:
         """
         Resolve user_id for initial plan bootstrap.
         Rule:
@@ -62,14 +61,14 @@ class PunishmentWorker:
 
         return None
 
-    async def ensure_initial_plan_schedule(self) -> Optional[str]:
+    async def ensure_initial_plan_schedule(self) -> str | None:
         """
         Bootstrap first plan schedule if no pending/processing records exist.
 
         Returns:
             Created schedule id if inserted, otherwise None.
         """
-        from backend.models import Schedule, ScheduleState, EventType
+        from backend.models import EventType, Schedule, ScheduleState
 
         in_flight_count = (
             self.session.query(Schedule)
@@ -128,7 +127,7 @@ class PunishmentWorker:
         )
         return str(schedule.id)
 
-    async def fetch_pending_schedules(self) -> List:
+    async def fetch_pending_schedules(self) -> list:
         """
         処理待ちスケジュールを取得する
 
@@ -138,21 +137,22 @@ class PunishmentWorker:
         from backend.models import Schedule, ScheduleState
 
         now = datetime.now()
-        schedules = self.session.query(Schedule).filter(
-            Schedule.state == ScheduleState.PENDING,
-            Schedule.run_at <= now
-        ).all()
+        schedules = (
+            self.session.query(Schedule)
+            .filter(Schedule.state == ScheduleState.PENDING, Schedule.run_at <= now)
+            .all()
+        )
 
         return schedules
 
-    async def fetch_processing_plan_schedules(self) -> List:
+    async def fetch_processing_plan_schedules(self) -> list:
         """
         監視対象候補のprocessing scheduleを取得する
 
         Returns:
             processingかつ(plan/remind)かつrun_at <= nowのスケジュールリスト
         """
-        from backend.models import Schedule, ScheduleState, EventType
+        from backend.models import EventType, Schedule, ScheduleState
 
         now = datetime.now()
         schedules = (
@@ -174,7 +174,7 @@ class PunishmentWorker:
         created = schedule.created_at or datetime.min
         return (updated, run_at, created, str(schedule.id))
 
-    def select_latest_processing_per_user(self, schedules: List) -> List:
+    def select_latest_processing_per_user(self, schedules: list) -> list:
         """
         ユーザーごとに最新processingレコードを1件に絞る
         """
@@ -193,7 +193,7 @@ class PunishmentWorker:
         Returns:
             更新件数
         """
-        from backend.models import Schedule, ScheduleState, EventType
+        from backend.models import EventType, Schedule, ScheduleState
 
         stale_rows = (
             self.session.query(Schedule)
@@ -238,10 +238,7 @@ class PunishmentWorker:
             raise Exception(f"Script file not found: {script_path}")
 
         result = subprocess.run(
-            [sys.executable, str(script_path)],
-            env=env,
-            capture_output=True,
-            text=True
+            [sys.executable, str(script_path)], env=env, capture_output=True, text=True
         )
 
         if result.returncode != 0:
@@ -254,7 +251,7 @@ class PunishmentWorker:
         Args:
             schedule: 対象スケジュール
         """
-        from backend.models import ScheduleState, EventType
+        from backend.models import EventType, ScheduleState
 
         try:
             if schedule.event_type == EventType.PLAN:
@@ -286,7 +283,9 @@ class PunishmentWorker:
             max_retry = 3
             if schedule.retry_count < max_retry:
                 from datetime import timedelta
+
                 from backend.worker.config_cache import get_config
+
                 retry_delay = get_config("RETRY_DELAY", 5, session=self.session)
                 schedule.run_at = datetime.now() + timedelta(minutes=retry_delay)
                 schedule.state = ScheduleState.PENDING
@@ -363,19 +362,18 @@ class PunishmentWorker:
 
 async def main() -> None:
     """
-        メインエントリーポイント
+    メインエントリーポイント
     """
     # Setup logging
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
     # Create database session
     database_url = os.getenv("DATABASE_URL", "sqlite:///oni.db")
     engine = create_engine(database_url)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
 
     try:
         worker = PunishmentWorker(session)

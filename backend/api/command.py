@@ -1,24 +1,25 @@
 """Command API Handlers"""
+
 import asyncio
 import json
 import os
-from datetime import datetime, timedelta
-from typing import Any, Dict
 from collections.abc import Mapping
+from datetime import datetime, timedelta
+from typing import Any
 
 import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.models import (
+    ChangeSource,
     Commitment,
+    ConfigAuditLog,
+    Configuration,
+    ConfigValueType,
+    EventType,
     Schedule,
     ScheduleState,
-    EventType,
-    Configuration,
-    ConfigAuditLog,
-    ConfigValueType,
-    ChangeSource,
 )
 
 MAX_COMMITMENT_ROWS = 10
@@ -221,7 +222,7 @@ def _load_pending_plan_prefill(user_id: str) -> tuple[list[dict[str, str]], dict
         session.close()
 
 
-def _open_slack_modal(trigger_id: str, view: Dict[str, Any]) -> tuple[bool, str]:
+def _open_slack_modal(trigger_id: str, view: dict[str, Any]) -> tuple[bool, str]:
     """
     Open a modal using Slack views.open API.
     Returns (ok, reason).
@@ -276,10 +277,7 @@ def _parse_private_metadata(raw_metadata: str) -> dict[str, str]:
 
 def _load_user_config_values(user_id: str) -> dict[str, str]:
     """Load config values for user with defaults."""
-    values = {
-        key: str(definition["default"])
-        for key, definition in CONFIG_DEFINITIONS.items()
-    }
+    values = {key: str(definition["default"]) for key, definition in CONFIG_DEFINITIONS.items()}
     if not user_id:
         return values
 
@@ -427,11 +425,7 @@ def _set_system_paused(user_id: str, paused: bool) -> bool:
 
     session = _get_session()
     try:
-        row = (
-            session.query(Configuration)
-            .filter(Configuration.key == "SYSTEM_PAUSED")
-            .first()
-        )
+        row = session.query(Configuration).filter(Configuration.key == "SYSTEM_PAUSED").first()
         old_value = row.value if row else None
 
         if row is None:
@@ -472,6 +466,7 @@ def _set_system_paused(user_id: str, paused: bool) -> bool:
     # Invalidate local config cache in this process.
     try:
         from backend.worker.config_cache import invalidate_config_cache
+
         invalidate_config_cache("SYSTEM_PAUSED")
     except Exception:
         pass
@@ -479,7 +474,7 @@ def _set_system_paused(user_id: str, paused: bool) -> bool:
     return old_value != paused_value
 
 
-async def process_base_commit(request) -> Dict[str, Any]:
+async def process_base_commit(request) -> dict[str, Any]:
     """
     ベースコミットコマンド処理
 
@@ -553,7 +548,7 @@ async def process_base_commit(request) -> Dict[str, Any]:
                 }
             ],
         }
-        
+
     print(f"[{datetime.now()}] views.open skipped: missing trigger_id")
 
     return {
@@ -572,7 +567,7 @@ async def process_base_commit(request) -> Dict[str, Any]:
     }
 
 
-async def process_plan(request) -> Dict[str, Any]:
+async def process_plan(request) -> dict[str, Any]:
     """
     plan編集コマンド処理
 
@@ -675,7 +670,7 @@ async def process_plan(request) -> Dict[str, Any]:
     }
 
 
-async def process_stop(request) -> Dict[str, Any]:
+async def process_stop(request) -> dict[str, Any]:
     """
     停止コマンド処理
 
@@ -707,7 +702,7 @@ async def process_stop(request) -> Dict[str, Any]:
     }
 
 
-async def process_restart(request) -> Dict[str, Any]:
+async def process_restart(request) -> dict[str, Any]:
     """
     再開コマンド処理
 
@@ -739,7 +734,7 @@ async def process_restart(request) -> Dict[str, Any]:
     }
 
 
-async def process_help(request) -> Dict[str, Any]:
+async def process_help(request) -> dict[str, Any]:
     """
     ヘルプコマンド処理
 
@@ -760,7 +755,7 @@ async def process_help(request) -> Dict[str, Any]:
     }
 
 
-async def process_config(request, config_data: Dict[str, Any] = None) -> Dict[str, Any]:
+async def process_config(request, config_data: dict[str, Any] = None) -> dict[str, Any]:
     """
     設定コマンド処理
 
@@ -783,11 +778,7 @@ async def process_config(request, config_data: Dict[str, Any] = None) -> Dict[st
             user_id = metadata.get("user_id", "")
 
         state = view.get("state", {})
-        state_values = (
-            state.get("values", {})
-            if isinstance(state, Mapping)
-            else {}
-        )
+        state_values = state.get("values", {}) if isinstance(state, Mapping) else {}
         updates, errors = _extract_config_updates_from_view(
             state_values if isinstance(state_values, dict) else {}
         )
@@ -803,15 +794,10 @@ async def process_config(request, config_data: Dict[str, Any] = None) -> Dict[st
             print(f"[{datetime.now()}] process_config save error: {exc}")
             return {
                 "response_action": "errors",
-                "errors": {
-                    "COACH_CHARACTOR": "設定保存に失敗しました。再度お試しください。"
-                },
+                "errors": {"COACH_CHARACTOR": "設定保存に失敗しました。再度お試しください。"},
             }
 
-        print(
-            f"[{datetime.now()}] config_submit saved: "
-            f"user_id={user_id} changed={changed_count}"
-        )
+        print(f"[{datetime.now()}] config_submit saved: user_id={user_id} changed={changed_count}")
         return {
             "response_action": "clear",
         }

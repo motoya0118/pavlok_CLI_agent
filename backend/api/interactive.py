@@ -1,27 +1,29 @@
 """Interactive API Handlers"""
+
 import asyncio
 import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta, time as dt_time
+from datetime import datetime, timedelta
+from datetime import time as dt_time
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.models import (
-    Commitment,
-    Schedule,
-    ScheduleState,
-    EventType,
     ActionLog,
     ActionResult,
+    Commitment,
+    Configuration,
+    EventType,
     Punishment,
     PunishmentMode,
-    Configuration,
+    Schedule,
+    ScheduleState,
 )
 
 MAX_COMMITMENT_ROWS = 10
@@ -51,7 +53,7 @@ def _get_session():
     return _SESSION_FACTORY()
 
 
-def _extract_submission_metadata(payload_data: Dict[str, Any]) -> dict[str, str]:
+def _extract_submission_metadata(payload_data: dict[str, Any]) -> dict[str, str]:
     """
     Extract context passed from slash command -> modal -> submission.
     We use private_metadata to keep channel_id for post-submit notifications.
@@ -78,7 +80,7 @@ def _extract_submission_metadata(payload_data: Dict[str, Any]) -> dict[str, str]
     return metadata
 
 
-def _extract_plan_row_map_from_metadata(payload_data: Dict[str, Any]) -> dict[int, dict[str, str]]:
+def _extract_plan_row_map_from_metadata(payload_data: dict[str, Any]) -> dict[int, dict[str, str]]:
     """
     Extract plan row mapping from view.private_metadata.
     Used by /plan modal to map input row -> commitment_id/task.
@@ -131,10 +133,7 @@ def _build_commitment_summary_message(
             for idx, row in enumerate(commitments, start=1)
         ]
         summary = "\n".join(summary_lines)
-        text = (
-            f"{mention} コミットメント登録完了\n"
-            f"今の登録は {len(commitments)} 件です。"
-        )
+        text = f"{mention} コミットメント登録完了\n今の登録は {len(commitments)} 件です。"
         blocks = [
             {
                 "type": "section",
@@ -304,9 +303,7 @@ async def _notify_plan_saved(
 
     visible_tasks = scheduled_tasks
     if not visible_tasks:
-        visible_tasks = [
-            {"task": "実行タスクなし", "date": "今日", "time": "--:--"}
-        ]
+        visible_tasks = [{"task": "実行タスクなし", "date": "今日", "time": "--:--"}]
 
     text = f"<@{user_id}> 24時間のplanを登録しました。"
     blocks = [
@@ -368,7 +365,7 @@ async def _notify_plan_saved(
             return dm_channel, "ok"
 
         def _post_message(target_channel: str, post_thread_ts: str = "") -> tuple[bool, str]:
-            payload: Dict[str, Any] = {
+            payload: dict[str, Any] = {
                 "channel": target_channel,
                 "text": text,
                 "blocks": blocks,
@@ -495,15 +492,13 @@ async def _run_agent_call(schedule_ids: list[str]) -> None:
         print(f"[{datetime.now()}] agent_call failed: {reason}")
 
 
-def _current_commitments_from_view(view: Dict[str, Any]) -> list[dict[str, str]]:
+def _current_commitments_from_view(view: dict[str, Any]) -> list[dict[str, str]]:
     """Extract current modal input values from Slack view payload."""
     blocks = view.get("blocks", [])
     state_values = view.get("state", {}).get("values", {})
 
     row_count = sum(
-        1
-        for block in blocks
-        if str(block.get("block_id", "")).startswith("commitment_")
+        1 for block in blocks if str(block.get("block_id", "")).startswith("commitment_")
     )
     row_count = max(3, row_count)
 
@@ -527,7 +522,7 @@ def _current_commitments_from_view(view: Dict[str, Any]) -> list[dict[str, str]]
     return commitments
 
 
-async def process_commitment_add_row(payload_data: Dict[str, Any]) -> Dict[str, Any]:
+async def process_commitment_add_row(payload_data: dict[str, Any]) -> dict[str, Any]:
     """
     Handle "+ 追加" in base_commit modal.
     For block_actions in modals, we update the view via views.update API.
@@ -544,7 +539,7 @@ async def process_commitment_add_row(payload_data: Dict[str, Any]) -> Dict[str, 
     return await _apply_modal_update(view, updated_view, "commitment_add_row")
 
 
-async def process_commitment_remove_row(payload_data: Dict[str, Any]) -> Dict[str, Any]:
+async def process_commitment_remove_row(payload_data: dict[str, Any]) -> dict[str, Any]:
     """
     Handle "- 削除" in base_commit modal.
     Removes the last commitment row while keeping at least MIN_COMMITMENT_ROWS.
@@ -602,7 +597,7 @@ def _resolve_commitment_task_name_for_schedule(session, schedule) -> str:
     return fallback or "タスク"
 
 
-def _extract_schedule_id_from_action(payload_data: Dict[str, Any]) -> str:
+def _extract_schedule_id_from_action(payload_data: dict[str, Any]) -> str:
     """Extract schedule_id from block action value JSON."""
     actions = payload_data.get("actions", [])
     if not actions:
@@ -622,7 +617,7 @@ def _extract_schedule_id_from_action(payload_data: Dict[str, Any]) -> str:
     return ""
 
 
-def _open_slack_modal(trigger_id: str, view: Dict[str, Any]) -> tuple[bool, str]:
+def _open_slack_modal(trigger_id: str, view: dict[str, Any]) -> tuple[bool, str]:
     """Open a modal using Slack views.open API."""
     bot_token = os.getenv("SLACK_BOT_USER_OAUTH_TOKEN")
     if not bot_token:
@@ -659,7 +654,7 @@ def _open_slack_modal(trigger_id: str, view: Dict[str, Any]) -> tuple[bool, str]
     return True, "ok"
 
 
-async def process_plan_open_modal(payload_data: Dict[str, Any]) -> Dict[str, Any]:
+async def process_plan_open_modal(payload_data: dict[str, Any]) -> dict[str, Any]:
     """
     Handle plan_open_modal button and open plan input modal via views.open.
     """
@@ -699,8 +694,8 @@ async def process_plan_open_modal(payload_data: Dict[str, Any]) -> Dict[str, Any
 
 
 async def _apply_modal_update(
-    view: Dict[str, Any], updated_view: Dict[str, Any], action_name: str
-) -> Dict[str, Any]:
+    view: dict[str, Any], updated_view: dict[str, Any], action_name: str
+) -> dict[str, Any]:
     """Update modal via views.update, or fallback to response_action update."""
 
     # Keep metadata flags that may be set by previous view state.
@@ -727,7 +722,7 @@ async def _apply_modal_update(
         }
 
     def _call_views_update() -> tuple[bool, str]:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "view_id": view_id,
             "view": updated_view,
         }
@@ -776,7 +771,7 @@ async def _apply_modal_update(
     }
 
 
-async def process_plan_submit(payload_data: Dict[str, Any]) -> Dict[str, Any]:
+async def process_plan_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
     """
     プラン登録処理（インタラクティブ）
 
@@ -797,7 +792,7 @@ async def process_plan_submit(payload_data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     commitments = _extract_commitments_from_submission(state_values)
-    validation_errors: Dict[str, str] = {}
+    validation_errors: dict[str, str] = {}
     normalized_rows: list[dict[str, str]] = []
 
     for row in commitments:
@@ -847,9 +842,7 @@ async def process_plan_submit(payload_data: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[{datetime.now()}] process_plan_submit DB error: {exc}")
         return {
             "response_action": "errors",
-            "errors": {
-                "commitment_1": "保存に失敗しました。もう一度試してください。"
-            },
+            "errors": {"commitment_1": "保存に失敗しました。もう一度試してください。"},
         }
     finally:
         session.close()
@@ -879,7 +872,7 @@ async def process_plan_submit(payload_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _extract_plan_task_indices(state_values: Dict[str, Any]) -> list[int]:
+def _extract_plan_task_indices(state_values: dict[str, Any]) -> list[int]:
     """Extract task indices from plan modal state keys like task_1_date."""
     indices: set[int] = set()
     for block_id in state_values.keys():
@@ -897,7 +890,7 @@ def _extract_plan_task_indices(state_values: Dict[str, Any]) -> list[int]:
 
 
 def _extract_static_select_value(
-    state_values: Dict[str, Any],
+    state_values: dict[str, Any],
     block_id: str,
     action_id: str,
 ) -> str:
@@ -913,7 +906,7 @@ def _extract_static_select_value(
 
 
 def _extract_timepicker_value(
-    state_values: Dict[str, Any],
+    state_values: dict[str, Any],
     block_id: str,
     action_id: str,
 ) -> str:
@@ -926,7 +919,7 @@ def _extract_timepicker_value(
 
 
 def _extract_skip_flag(
-    state_values: Dict[str, Any],
+    state_values: dict[str, Any],
     block_id: str,
     action_id: str,
 ) -> bool:
@@ -957,10 +950,12 @@ def _resolve_relative_datetime(date_value: str, normalized_time: str) -> datetim
     )
 
 
-def _parse_plan_submission_state(state_values: Dict[str, Any]) -> tuple[
+def _parse_plan_submission_state(
+    state_values: dict[str, Any],
+) -> tuple[
     list[dict[str, Any]],
     dict[str, str],
-    Dict[str, str],
+    dict[str, str],
 ]:
     """
     Parse plan modal submission payload.
@@ -969,16 +964,12 @@ def _parse_plan_submission_state(state_values: Dict[str, Any]) -> tuple[
     - next_plan {date, time}
     - validation errors keyed by block_id
     """
-    errors: Dict[str, str] = {}
+    errors: dict[str, str] = {}
     task_rows: list[dict[str, Any]] = []
 
     for idx in _extract_plan_task_indices(state_values):
-        date_value = _extract_static_select_value(
-            state_values, f"task_{idx}_date", "date"
-        )
-        time_value = _extract_timepicker_value(
-            state_values, f"task_{idx}_time", "time"
-        )
+        date_value = _extract_static_select_value(state_values, f"task_{idx}_date", "date")
+        time_value = _extract_timepicker_value(state_values, f"task_{idx}_time", "time")
         skip = _extract_skip_flag(state_values, f"task_{idx}_skip", "skip")
         normalized_time = _normalize_time(time_value)
 
@@ -1013,7 +1004,7 @@ def _parse_plan_submission_state(state_values: Dict[str, Any]) -> tuple[
     return task_rows, {"date": next_plan_date, "time": next_plan_time}, errors
 
 
-async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, Any]:
+async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
     """
     Handle plan modal (callback_id=plan_submit):
     - mark opened plan schedule done
@@ -1043,7 +1034,7 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
     remind_rows_to_save: list[dict[str, Any]] = []
     skipped_task_names: list[str] = []
     scheduled_tasks_for_message: list[dict[str, str]] = []
-    mapping_errors: Dict[str, str] = {}
+    mapping_errors: dict[str, str] = {}
     for row in task_rows:
         mapped_commitment = plan_row_map.get(row["index"], {})
         if not mapped_commitment:
@@ -1062,8 +1053,7 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
         task_name = mapped_commitment.get("task", "").strip() or f"タスク{row['index']}"
         if not commitment_id:
             mapping_errors[f"task_{row['index']}_time"] = (
-                "コミットメントIDを解決できませんでした。"
-                "/base_commit から再設定してください。"
+                "コミットメントIDを解決できませんでした。/base_commit から再設定してください。"
             )
             continue
 
@@ -1195,9 +1185,7 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
         print(f"[{datetime.now()}] process_plan_modal_submit DB error: {exc}")
         return {
             "response_action": "errors",
-            "errors": {
-                "next_plan_time": "保存に失敗しました。もう一度試してください。"
-            },
+            "errors": {"next_plan_time": "保存に失敗しました。もう一度試してください。"},
         }
     finally:
         session.close()
@@ -1227,7 +1215,7 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
     }
 
 
-def _extract_commitments_from_submission(state_values: Dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_commitments_from_submission(state_values: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Extract commitment rows from Slack view_submission state.
     Supports:
@@ -1238,7 +1226,7 @@ def _extract_commitments_from_submission(state_values: Dict[str, Any]) -> list[d
     for block_id in state_values.keys():
         for prefix in ("commitment_", "time_", "task_"):
             if block_id.startswith(prefix):
-                suffix = block_id[len(prefix):]
+                suffix = block_id[len(prefix) :]
                 if suffix.isdigit():
                     indices.add(int(suffix))
 
@@ -1291,7 +1279,9 @@ def _normalize_time(raw_time: str) -> str:
     if len(value) == 8 and value.count(":") == 2:
         hh, mm, ss = value.split(":")
         if (
-            hh.isdigit() and mm.isdigit() and ss.isdigit()
+            hh.isdigit()
+            and mm.isdigit()
+            and ss.isdigit()
             and 0 <= int(hh) <= 23
             and 0 <= int(mm) <= 59
             and 0 <= int(ss) <= 59
@@ -1300,7 +1290,7 @@ def _normalize_time(raw_time: str) -> str:
     return ""
 
 
-def _extract_schedule_id_from_action(payload_data: Dict[str, Any]) -> str:
+def _extract_schedule_id_from_action(payload_data: dict[str, Any]) -> str:
     """Extract schedule_id from block action payload value JSON."""
     actions = payload_data.get("actions", [])
     if not isinstance(actions, list) or not actions:
@@ -1325,7 +1315,7 @@ def _extract_schedule_id_from_action(payload_data: Dict[str, Any]) -> str:
     return schedule_id if isinstance(schedule_id, str) else ""
 
 
-def _extract_action_channel_id(payload_data: Dict[str, Any]) -> str:
+def _extract_action_channel_id(payload_data: dict[str, Any]) -> str:
     """Extract channel_id from interactive payload."""
     container = payload_data.get("container", {})
     if isinstance(container, dict):
@@ -1341,7 +1331,7 @@ def _extract_action_channel_id(payload_data: Dict[str, Any]) -> str:
     return ""
 
 
-def _extract_action_thread_ts(payload_data: Dict[str, Any]) -> str:
+def _extract_action_thread_ts(payload_data: dict[str, Any]) -> str:
     """Extract thread timestamp from interactive payload."""
     container = payload_data.get("container", {})
     if isinstance(container, dict):
@@ -1506,6 +1496,7 @@ async def _send_no_punishment(
     def _send() -> tuple[bool, str]:
         try:
             from backend.pavlok_lib import PavlokClient
+
             client = PavlokClient()
             result = client.stimulate(
                 stimulus_type=stimulus_type,
@@ -1613,7 +1604,9 @@ async def _notify_remind_result(
         print(f"[{datetime.now()}] remind-result notification failed: {post_detail}")
 
 
-async def process_remind_response(payload_data: Dict[str, Any], action: str = "YES") -> Dict[str, Any]:
+async def process_remind_response(
+    payload_data: dict[str, Any], action: str = "YES"
+) -> dict[str, Any]:
     """
     リマインド応答処理（YES/NO）
 
@@ -1767,7 +1760,7 @@ async def process_remind_response(payload_data: Dict[str, Any], action: str = "Y
     }
 
 
-async def process_ignore_response(payload_data: Dict[str, Any]) -> Dict[str, Any]:
+async def process_ignore_response(payload_data: dict[str, Any]) -> dict[str, Any]:
     """
     無視応答処理（今やりました/やっぱり）
 
@@ -1783,7 +1776,8 @@ async def process_ignore_response(payload_data: Dict[str, Any]) -> Dict[str, Any
         action_value = actions[0].get("value", "")
         try:
             import json
-            value_data = json.loads(action_value)
+
+            json.loads(action_value)
             action_type = "yes" if "yes" in actions[0].get("action_id", "") else "no"
         except (json.JSONDecodeError, TypeError):
             action_type = "yes"
@@ -1791,12 +1785,6 @@ async def process_ignore_response(payload_data: Dict[str, Any]) -> Dict[str, Any
         action_type = "yes"
 
     if action_type == "yes":
-        return {
-            "status": "success",
-            "detail": "今やりました"
-        }
+        return {"status": "success", "detail": "今やりました"}
     else:
-        return {
-            "status": "success",
-            "detail": "やっぱり..."
-        }
+        return {"status": "success", "detail": "やっぱり..."}

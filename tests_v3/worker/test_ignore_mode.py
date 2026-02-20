@@ -1,8 +1,8 @@
 # v0.3 Worker Ignore Mode Detection Tests
-import pytest
 from datetime import datetime, timedelta
 
-from backend.worker.ignore_mode import detect_ignore_mode, calculate_ignore_punishment
+import pytest
+
 from backend.models import (
     ActionLog,
     ActionResult,
@@ -10,11 +10,11 @@ from backend.models import (
     PunishmentMode,
     ScheduleState,
 )
+from backend.worker.ignore_mode import calculate_ignore_punishment, detect_ignore_mode
 
 
 @pytest.mark.asyncio
 class TestIgnoreModeDetection:
-
     @staticmethod
     def _set_processing_started_at(session, schedule, seconds_ago: int) -> None:
         schedule.updated_at = datetime.now() - timedelta(seconds=seconds_ago)
@@ -30,6 +30,7 @@ class TestIgnoreModeDetection:
         self._set_processing_started_at(v3_db_session, schedule, 900)
 
         from backend.worker import ignore_mode
+
         original_send = ignore_mode._send_punishment
         ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
@@ -52,6 +53,7 @@ class TestIgnoreModeDetection:
         self._set_processing_started_at(v3_db_session, schedule, 1800)
 
         from backend.worker import ignore_mode
+
         original_send = ignore_mode._send_punishment
         ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
@@ -112,12 +114,11 @@ class TestIgnoreModeDetection:
         )
         self._set_processing_started_at(v3_db_session, schedule, 900)
         v3_test_data_factory.create_punishment(
-            schedule_id=schedule.id,
-            mode=PunishmentMode.IGNORE,
-            count=1
+            schedule_id=schedule.id, mode=PunishmentMode.IGNORE, count=1
         )
 
         from backend.worker import ignore_mode
+
         original_send = ignore_mode._send_punishment
         ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
@@ -141,6 +142,7 @@ class TestIgnoreModeDetection:
         self._set_processing_started_at(v3_db_session, schedule, 8100)
 
         from backend.worker import ignore_mode
+
         original_send = ignore_mode._send_punishment
         ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
         result = detect_ignore_mode(v3_db_session, schedule)
@@ -172,7 +174,10 @@ class TestIgnoreModeDetection:
         self._set_processing_started_at(v3_db_session, schedule, 2700)
 
         from backend.worker import ignore_mode
-        original_get_config = __import__("backend.worker.config_cache", fromlist=["get_config"]).get_config
+
+        original_get_config = __import__(
+            "backend.worker.config_cache", fromlist=["get_config"]
+        ).get_config
         original_send = ignore_mode._send_punishment
 
         def _fake_get_config(key, default=None, session=None):

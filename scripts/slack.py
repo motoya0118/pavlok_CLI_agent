@@ -1,4 +1,5 @@
 """Slack helper utilities for worker scripts."""
+
 from __future__ import annotations
 
 import os
@@ -21,9 +22,7 @@ def require_channel() -> str:
         value = os.getenv(key, "").strip()
         if value:
             return value
-    raise RuntimeError(
-        "Slack channel is not configured. Set SLACK_CHANNEL or SLACK_CHANNEL_ID."
-    )
+    raise RuntimeError("Slack channel is not configured. Set SLACK_CHANNEL or SLACK_CHANNEL_ID.")
 
 
 def post_message(
@@ -77,14 +76,8 @@ def post_message(
                     f"reason={pavlok_result.get('reason') or reason}"
                 )
             else:
-                print(
-                    "notification stimulus failed: "
-                    f"user_id={user_id} detail={pavlok_result}"
-                )
+                print(f"notification stimulus failed: user_id={user_id} detail={pavlok_result}")
         except Exception as exc:
-            print(
-                "notification stimulus failed: "
-                f"user_id={user_id} detail={exc}"
-            )
+            print(f"notification stimulus failed: user_id={user_id} detail={exc}")
 
     return response

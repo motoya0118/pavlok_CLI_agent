@@ -4,13 +4,14 @@ v0.3 BlockKit UI Components
 Slack BlockKit JSON generators for Oni System v0.3 UI components.
 Following v0.3_slack_ui_spec.md specifications.
 """
+
 from datetime import datetime
 from typing import Any
-
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
 
 def format_timestamp_jst(dt: datetime) -> str:
     """Format datetime to JST string for display"""
@@ -43,7 +44,10 @@ def punishment_display_text(punishment: dict[str, Any]) -> str:
 # Base Commit Modal (/base_commit)
 # ============================================================================
 
-def _commitment_row_blocks(index: int, commitment: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+
+def _commitment_row_blocks(
+    index: int, commitment: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     """Generate blocks for a single commitment row"""
     task = commitment.get("task", "") if commitment else ""
     time = commitment.get("time", "") if commitment else ""
@@ -123,40 +127,42 @@ def base_commit_modal(commitments: list[dict[str, Any]]) -> dict[str, Any]:
             blocks.append({"type": "divider"})
 
     # Add action buttons
-    blocks.extend([
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "+ 追加",
+    blocks.extend(
+        [
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "+ 追加",
+                        },
+                        "style": "primary",
+                        "action_id": "commitment_add_row",
                     },
-                    "style": "primary",
-                    "action_id": "commitment_add_row",
-                },
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "- 削除",
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "- 削除",
+                        },
+                        "style": "danger",
+                        "action_id": "commitment_remove_row",
                     },
-                    "style": "danger",
-                    "action_id": "commitment_remove_row",
-                }
-            ],
-        },
-        {
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": "💡 コミットメントは毎日指定時刻にplanイベントとして登録されます",
-                }
-            ],
-        },
-    ])
+                ],
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "💡 コミットメントは毎日指定時刻にplanイベントとして登録されます",
+                    }
+                ],
+            },
+        ]
+    )
 
     return {
         "type": "modal",
@@ -176,6 +182,7 @@ def base_commit_modal(commitments: list[dict[str, Any]]) -> dict[str, Any]:
 # ============================================================================
 # Stop/Restart/Help Notifications (/stop, /restart, /help)
 # ============================================================================
+
 
 def stop_notification() -> list[dict[str, Any]]:
     """Generate /stop notification blocks"""
@@ -323,6 +330,7 @@ def help_notification() -> list[dict[str, Any]]:
 # ============================================================================
 # Config Modal (/config)
 # ============================================================================
+
 
 def _punishment_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
     """Generate punishment configuration section"""
@@ -607,49 +615,53 @@ def config_modal(config_values: dict[str, str]) -> dict[str, Any]:
     blocks.extend(_coach_section(config_values))
 
     # Add action buttons
-    blocks.append({
-        "type": "divider",
-    })
-    blocks.append({
-        "type": "actions",
-        "elements": [
-            {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": "🔄 全リセット",
-                },
-                "style": "danger",
-                "action_id": "config_reset_all",
-                "confirm": {
-                    "title": {
-                        "type": "plain_text",
-                        "text": "確認",
-                    },
+    blocks.append(
+        {
+            "type": "divider",
+        }
+    )
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
                     "text": {
                         "type": "plain_text",
-                        "text": "全ての設定をデフォルト値にリセットします。よろしいですか？",
+                        "text": "🔄 全リセット",
                     },
+                    "style": "danger",
+                    "action_id": "config_reset_all",
                     "confirm": {
-                        "type": "plain_text",
-                        "text": "リセット",
-                    },
-                    "deny": {
-                        "type": "plain_text",
-                        "text": "キャンセル",
+                        "title": {
+                            "type": "plain_text",
+                            "text": "確認",
+                        },
+                        "text": {
+                            "type": "plain_text",
+                            "text": "全ての設定をデフォルト値にリセットします。よろしいですか？",
+                        },
+                        "confirm": {
+                            "type": "plain_text",
+                            "text": "リセット",
+                        },
+                        "deny": {
+                            "type": "plain_text",
+                            "text": "キャンセル",
+                        },
                     },
                 },
-            },
-            {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": "📋 変更履歴",
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "📋 変更履歴",
+                    },
+                    "action_id": "config_history",
                 },
-                "action_id": "config_history",
-            },
-        ],
-    })
+            ],
+        }
+    )
 
     return {
         "type": "modal",
@@ -670,6 +682,7 @@ def config_modal(config_values: dict[str, str]) -> dict[str, Any]:
 # Audit Log Display (/audit)
 # ============================================================================
 
+
 def audit_log_display(audit_logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Generate /audit display blocks"""
     blocks = [
@@ -689,27 +702,31 @@ def audit_log_display(audit_logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         else:
             changed_str = str(changed_at)
 
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*{changed_str}*\n`{log.get('config_key', '')}`: {log.get('old_value', '-')} → {log.get('new_value', '-')}\nby @{log.get('changed_by', 'user')}",
-            },
-        })
-
-    blocks.append({
-        "type": "actions",
-        "elements": [
+        blocks.append(
             {
-                "type": "button",
+                "type": "section",
                 "text": {
-                    "type": "plain_text",
-                    "text": "もっと見る",
+                    "type": "mrkdwn",
+                    "text": f"*{changed_str}*\n`{log.get('config_key', '')}`: {log.get('old_value', '-')} → {log.get('new_value', '-')}\nby @{log.get('changed_by', 'user')}",
                 },
-                "action_id": "audit_more",
-            },
-        ],
-    })
+            }
+        )
+
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "もっと見る",
+                    },
+                    "action_id": "audit_more",
+                },
+            ],
+        }
+    )
 
     return blocks
 
@@ -717,6 +734,7 @@ def audit_log_display(audit_logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # ============================================================================
 # Plan Event UI
 # ============================================================================
+
 
 def plan_start_notification(
     schedule_id: str,
@@ -757,35 +775,34 @@ def plan_start_notification(
 
     blocks.extend(
         [
-        {
-            "type": "actions",
-            "block_id": "plan_trigger",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "📝 予定を登録",
+            {
+                "type": "actions",
+                "block_id": "plan_trigger",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "📝 予定を登録",
+                        },
+                        "style": "primary",
+                        "action_id": "plan_open_modal",
+                        "value": f'{{"schedule_id": "{schedule_id}"}}',
                     },
-                    "style": "primary",
-                    "action_id": "plan_open_modal",
-                    "value": f'{{"schedule_id": "{schedule_id}"}}',
-                },
-            ],
-        },
-        {
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": (
-                        f"⏰ 応答がない場合、"
-                        f"{ignore_interval_minutes}分後に催促が始まります"
-                    ),
-                },
-            ],
-        },
-    ]
+                ],
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"⏰ 応答がない場合、{ignore_interval_minutes}分後に催促が始まります"
+                        ),
+                    },
+                ],
+            },
+        ]
     )
     return blocks
 
@@ -908,51 +925,53 @@ def plan_input_modal(
             break
 
     # Add next plan section
-    blocks.extend([
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": "*🔁 次回計画 (event.plan)*",
-            },
-        },
-        {
-            "type": "input",
-            "block_id": "next_plan_date",
-            "label": {
-                "type": "plain_text",
-                "text": "実行日",
-            },
-            "element": {
-                "type": "static_select",
-                "action_id": "date",
-                "initial_option": next_plan_initial_option,
-                "options": next_plan_date_options,
-            },
-        },
-        {
-            "type": "input",
-            "block_id": "next_plan_time",
-            "label": {
-                "type": "plain_text",
-                "text": "実行時間",
-            },
-            "element": {
-                "type": "timepicker",
-                "action_id": "time",
-                "initial_time": next_plan_time,
-            },
-        },
-        {
-            "type": "context",
-            "elements": [
-                {
+    blocks.extend(
+        [
+            {
+                "type": "section",
+                "text": {
                     "type": "mrkdwn",
-                    "text": "💡 次回計画は必須です。スキップできません。",
+                    "text": "*🔁 次回計画 (event.plan)*",
                 },
-            ],
-        },
-    ])
+            },
+            {
+                "type": "input",
+                "block_id": "next_plan_date",
+                "label": {
+                    "type": "plain_text",
+                    "text": "実行日",
+                },
+                "element": {
+                    "type": "static_select",
+                    "action_id": "date",
+                    "initial_option": next_plan_initial_option,
+                    "options": next_plan_date_options,
+                },
+            },
+            {
+                "type": "input",
+                "block_id": "next_plan_time",
+                "label": {
+                    "type": "plain_text",
+                    "text": "実行時間",
+                },
+                "element": {
+                    "type": "timepicker",
+                    "action_id": "time",
+                    "initial_time": next_plan_time,
+                },
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "💡 次回計画は必須です。スキップできません。",
+                    },
+                ],
+            },
+        ]
+    )
 
     return {
         "type": "modal",
@@ -976,7 +995,9 @@ def plan_complete_notification(
     """Generate plan complete notification blocks"""
     task_lines = []
     for task in scheduled_tasks:
-        task_lines.append(f"*{task.get('task', '')}*\n🕐 {task.get('date', '今日')} {task.get('time', '')}")
+        task_lines.append(
+            f"*{task.get('task', '')}*\n🕐 {task.get('date', '今日')} {task.get('time', '')}"
+        )
 
     blocks = [
         {
@@ -1017,6 +1038,7 @@ def plan_complete_notification(
 # ============================================================================
 # Remind Event UI
 # ============================================================================
+
 
 def remind_post(
     schedule_id: str,
@@ -1082,8 +1104,7 @@ def remind_post(
                 {
                     "type": "mrkdwn",
                     "text": (
-                        f"⚠️ 応答がない場合、"
-                        f"{ignore_interval_minutes}分ごとにPavlokが動作します"
+                        f"⚠️ 応答がない場合、{ignore_interval_minutes}分ごとにPavlokが動作します"
                     ),
                 },
             ],
@@ -1136,6 +1157,7 @@ def remind_no_response(
 # ============================================================================
 # Ignore Detection UI
 # ============================================================================
+
 
 def ignore_detection_post(
     schedule_id: str,
@@ -1228,6 +1250,7 @@ def ignore_max_reached_post(
 # ============================================================================
 # Error Notifications
 # ============================================================================
+
 
 def error_notification(
     error_message: str,

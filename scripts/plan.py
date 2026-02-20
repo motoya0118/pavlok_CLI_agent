@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 v0.3 Plan Event Script
 
 planイベント実行：24時間分の予定をSlackに投稿
 """
+
 import os
 import sys
 from pathlib import Path
@@ -14,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from backend.slack_lib.blockkit import BlockKitBuilder
@@ -52,13 +55,14 @@ def main():
         sys.exit(1)
 
     # Get user's commitments from database
-    from backend.models import Commitment, Schedule
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from backend.models import Commitment, Schedule
+
     engine = create_engine(os.getenv("DATABASE_URL", "sqlite:///oni.db"))
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
 
     try:
         schedule = session.query(Schedule).filter_by(id=schedule_id).first()
@@ -67,25 +71,19 @@ def main():
             sys.exit(1)
 
         # Get active commitments
-        commitments = session.query(Commitment).filter_by(
-            user_id=schedule.user_id,
-            active=True
-        ).order_by(Commitment.time).all()
+        commitments = (
+            session.query(Commitment)
+            .filter_by(user_id=schedule.user_id, active=True)
+            .order_by(Commitment.time)
+            .all()
+        )
 
         # Build scheduled tasks list
         scheduled_tasks = []
         for cm in commitments:
-            scheduled_tasks.append({
-                "task": cm.task,
-                "date": "今日",
-                "time": cm.time
-            })
+            scheduled_tasks.append({"task": cm.task, "date": "今日", "time": cm.time})
 
         # Build next plan info
-        next_plan = {
-            "date": "明日",
-            "time": "07:00"
-        }
 
         # Get channel
         channel = slack.require_channel()

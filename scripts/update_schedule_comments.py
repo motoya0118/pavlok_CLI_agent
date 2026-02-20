@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 Update schedule.comment / yes_comment / no_comment in bulk.
 """
+
 import json
 import os
 import sys
@@ -74,8 +76,8 @@ def main() -> None:
     target_ids = list(update_map.keys())
 
     engine = create_engine(os.getenv("DATABASE_URL", "sqlite:///oni.db"))
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
 
     try:
         rows = (

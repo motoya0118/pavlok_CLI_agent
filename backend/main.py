@@ -1,21 +1,33 @@
 """FastAPI Main Application for Oni System v0.3"""
-import os
+
 import json
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from pathlib import Path
 
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from .api import (
-    process_base_commit, process_plan, process_stop, process_restart, process_help, process_config,
-    process_plan_submit, process_plan_modal_submit, process_remind_response, process_ignore_response,
-    process_plan_open_modal, process_commitment_add_row, process_commitment_remove_row,
+    process_base_commit,
+    process_commitment_add_row,
+    process_commitment_remove_row,
+    process_config,
+    process_help,
+    process_ignore_response,
+    process_plan,
+    process_plan_modal_submit,
+    process_plan_open_modal,
+    process_plan_submit,
+    process_remind_response,
+    process_restart,
+    process_stop,
 )
-from .api.signature import verify_slack_signature
 from .api.internal_protection import verify_internal_request
+from .api.signature import verify_slack_signature
 from .models import Base
 
 # Load local .env if present (without overriding real environment variables).
@@ -25,14 +37,8 @@ load_dotenv()
 # Database Setup
 # ============================================================================
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 # Get database URL from environment
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite:///./oni.db"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./oni.db")
 
 # Create engine
 engine = create_engine(
@@ -41,16 +47,13 @@ engine = create_engine(
 )
 
 # Create session factory
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 # ============================================================================
 # Lifespan Management
 # ============================================================================
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -86,13 +89,16 @@ app = FastAPI(
 # Middleware
 # ============================================================================
 
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log all incoming requests."""
     start_time = datetime.now()
     response = await call_next(request)
     duration = (datetime.now() - start_time).total_seconds()
-    print(f"[{datetime.now()}] {request.method} {request.url.path} - {response.status_code} ({duration:.3f}s)")
+    print(
+        f"[{datetime.now()}] {request.method} {request.url.path} - {response.status_code} ({duration:.3f}s)"
+    )
     return response
 
 
@@ -100,29 +106,24 @@ async def log_requests(request: Request, call_next):
 # Health Check
 # ============================================================================
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {
-        "status": "ok",
-        "version": "0.3.0",
-        "timestamp": datetime.now().isoformat()
-    }
+    return {"status": "ok", "version": "0.3.0", "timestamp": datetime.now().isoformat()}
 
 
 # ============================================================================
 # Slack Webhook Endpoints
 # ============================================================================
 
+
 @app.post("/slack/command")
 async def slack_command(request: Request):
     """Handle Slack slash commands."""
     # Verify signature
     if not await verify_slack_signature(request):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Invalid signature"}
-        )
+        return JSONResponse(status_code=401, content={"error": "Invalid signature"})
 
     form_data = await request.form()
     return await route_slash_command(form_data)
@@ -133,19 +134,13 @@ async def slack_interactive(request: Request):
     """Handle Slack interactive components (buttons, modals)."""
     # Verify signature
     if not await verify_slack_signature(request):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Invalid signature"}
-        )
+        return JSONResponse(status_code=401, content={"error": "Invalid signature"})
 
     form_data = await request.form()
     payload = form_data.get("payload")
 
     if not payload:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Missing payload"}
-        )
+        return JSONResponse(status_code=400, content={"error": "Missing payload"})
 
     payload_data = json.loads(payload)
     return await route_interactive_payload(payload_data)
@@ -158,10 +153,7 @@ async def slack_gateway(request: Request):
     Accept both slash commands and interactive payloads, then route internally.
     """
     if not await verify_slack_signature(request):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Invalid signature"}
-        )
+        return JSONResponse(status_code=401, content={"error": "Invalid signature"})
 
     form_data = await request.form()
     payload = form_data.get("payload")
@@ -170,10 +162,7 @@ async def slack_gateway(request: Request):
         try:
             payload_data = json.loads(payload)
         except json.JSONDecodeError:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Invalid JSON payload"}
-            )
+            return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
         return await route_interactive_payload(payload_data)
 
     return await route_slash_command(form_data)
@@ -198,10 +187,7 @@ async def route_slash_command(form_data):
     if command == "/config":
         return await process_config(form_data)
 
-    return JSONResponse(
-        status_code=400,
-        content={"error": f"Unknown command: {command}"}
-    )
+    return JSONResponse(status_code=400, content={"error": f"Unknown command: {command}"})
 
 
 async def route_interactive_payload(payload_data):
@@ -235,33 +221,25 @@ async def route_interactive_payload(payload_data):
             if action_id == "ignore_respond":
                 return await process_ignore_response(payload_data)
 
-    return JSONResponse(
-        status_code=400,
-        content={"error": f"Unknown action type: {action_type}"}
-    )
+    return JSONResponse(status_code=400, content={"error": f"Unknown action type: {action_type}"})
 
 
 # ============================================================================
 # Internal Endpoints (for Worker)
 # ============================================================================
 
+
 @app.post("/internal/execute/{event_type}")
 async def internal_execute(event_type: str, request: Request):
     """Handle internal execution requests from Worker."""
     # Verify internal request
     if not await verify_internal_request(request):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Unauthorized"}
-        )
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     print(f"[{datetime.now()}] Internal execute: {event_type}")
 
     # TODO: Implement event execution logic
-    return {
-        "status": "ok",
-        "event_type": event_type
-    }
+    return {"status": "ok", "event_type": event_type}
 
 
 @app.get("/internal/execute/{event_type}")
@@ -269,18 +247,12 @@ async def internal_execute_get(event_type: str, request: Request):
     """Handle internal execution requests from Worker (GET for testing)."""
     # Verify internal request
     if not await verify_internal_request(request):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Unauthorized"}
-        )
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     print(f"[{datetime.now()}] Internal execute (GET): {event_type}")
 
     # TODO: Implement event execution logic
-    return {
-        "status": "ok",
-        "event_type": event_type
-    }
+    return {"status": "ok", "event_type": event_type}
 
 
 @app.get("/internal/config/{key}")
@@ -288,17 +260,14 @@ async def internal_get_config(key: str, request: Request):
     """Get configuration value for Worker."""
     # Verify internal request
     if not await verify_internal_request(request):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Unauthorized"}
-        )
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     print(f"[{datetime.now()}] Internal config: {key}")
 
     # TODO: Implement config retrieval
     return {
         "key": key,
-        "value": None  # TODO: Get from database
+        "value": None,  # TODO: Get from database
     }
 
 
@@ -306,16 +275,15 @@ async def internal_get_config(key: str, request: Request):
 # Error Handlers
 # ============================================================================
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler."""
     import traceback
+
     print(f"[{datetime.now()}] ERROR: {exc}")
     print(traceback.format_exc())
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Internal server error"}
-    )
+    return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 
 # ============================================================================
@@ -324,9 +292,5 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

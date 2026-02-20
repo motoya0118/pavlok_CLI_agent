@@ -1,20 +1,19 @@
 # v0.3 Worker Config Cache Tests
-import pytest
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import pytest
+
 from backend.worker.config_cache import get_config, invalidate_config_cache
 
 
 @pytest.mark.asyncio
 class TestConfigCache:
-
     @pytest.mark.asyncio
     async def test_get_config_from_db(self, v3_db_session, v3_test_data_factory):
         """DBから設定値を取得できること"""
-        config = v3_test_data_factory.create_configuration(
-            key="TEST_CONFIG",
-            value="test_value",
-            value_type="str"
+        v3_test_data_factory.create_configuration(
+            key="TEST_CONFIG", value="test_value", value_type="str"
         )
 
         result = get_config("TEST_CONFIG", session=v3_db_session)
@@ -37,9 +36,7 @@ class TestConfigCache:
     async def test_cache_ttl_60_seconds(self, v3_db_session, v3_test_data_factory):
         """キャッシュが60秒間有効であること"""
         config = v3_test_data_factory.create_configuration(
-            key="CACHE_TEST_CONFIG",
-            value="initial_value",
-            value_type="str"
+            key="CACHE_TEST_CONFIG", value="initial_value", value_type="str"
         )
 
         # First call - from DB
@@ -65,9 +62,7 @@ class TestConfigCache:
     async def test_cache_invalidation(self, v3_db_session, v3_test_data_factory):
         """キャッシュの無効化ができること"""
         config = v3_test_data_factory.create_configuration(
-            key="INVALIDATE_TEST_CONFIG",
-            value="initial_value",
-            value_type="str"
+            key="INVALIDATE_TEST_CONFIG", value="initial_value", value_type="str"
         )
 
         # First call
@@ -89,36 +84,25 @@ class TestConfigCache:
     async def test_parse_value_types(self, v3_db_session, v3_test_data_factory):
         """各種タイプの値を正しくパースできること"""
         # String type
-        str_config = v3_test_data_factory.create_configuration(
-            key="STR_CONFIG",
-            value="hello",
-            value_type="str"
-        )
+        v3_test_data_factory.create_configuration(key="STR_CONFIG", value="hello", value_type="str")
         assert get_config("STR_CONFIG", session=v3_db_session) == "hello"
 
         # Integer type
-        int_config = v3_test_data_factory.create_configuration(
-            key="INT_CONFIG",
-            value="42",
-            value_type="int"
-        )
+        v3_test_data_factory.create_configuration(key="INT_CONFIG", value="42", value_type="int")
         assert get_config("INT_CONFIG", session=v3_db_session) == 42
 
         # Boolean type
-        bool_config = v3_test_data_factory.create_configuration(
-            key="BOOL_CONFIG",
-            value="true",
-            value_type="bool"
+        v3_test_data_factory.create_configuration(
+            key="BOOL_CONFIG", value="true", value_type="bool"
         )
         assert get_config("BOOL_CONFIG", session=v3_db_session) is True
 
         # JSON type
         import json
+
         json_value = json.dumps({"key": "value"})
-        json_config = v3_test_data_factory.create_configuration(
-            key="JSON_CONFIG",
-            value=json_value,
-            value_type="json"
+        v3_test_data_factory.create_configuration(
+            key="JSON_CONFIG", value=json_value, value_type="json"
         )
         assert get_config("JSON_CONFIG", session=v3_db_session) == {"key": "value"}
 

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 v0.3 Agent Call Script
 
 Use prompts/add_comment.md + `codex exec` to populate remind comments.
 """
+
 import json
 import os
 import shutil
@@ -226,9 +228,9 @@ def main() -> None:
         return
 
     engine = create_engine(os.getenv("DATABASE_URL", "sqlite:///oni.db"))
-    Session = sessionmaker(bind=engine)
+    session_factory = sessionmaker(bind=engine)
 
-    session = Session()
+    session = session_factory()
     try:
         rows = load_target_rows(session, schedule_ids)
         if not rows:
@@ -260,14 +262,10 @@ def main() -> None:
     trace["codex"] = codex_result
     trace["prompt"] = prompt
 
-    session = Session()
+    session = session_factory()
     try:
         rows = load_target_rows(session, schedule_ids)
-        filled_count = sum(
-            1
-            for row in rows
-            if row.comment and row.yes_comment and row.no_comment
-        )
+        filled_count = sum(1 for row in rows if row.comment and row.yes_comment and row.no_comment)
 
         fallback_updated = 0
         if filled_count < len(rows):
@@ -276,9 +274,7 @@ def main() -> None:
                 session.commit()
             rows = load_target_rows(session, schedule_ids)
             filled_count = sum(
-                1
-                for row in rows
-                if row.comment and row.yes_comment and row.no_comment
+                1 for row in rows if row.comment and row.yes_comment and row.no_comment
             )
 
         trace["status"] = "completed"
