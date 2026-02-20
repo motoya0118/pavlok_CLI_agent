@@ -27,6 +27,29 @@ async def test_route_slash_command_plan(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_route_slash_command_help(monkeypatch):
+    form_data = {
+        "command": "/help",
+        "user_id": "U03JBULT484",
+    }
+    called = {}
+
+    async def _fake_process_help(received_form_data):
+        called["form_data"] = received_form_data
+        return {"status": "success"}
+
+    monkeypatch.setattr(
+        "backend.main.process_help",
+        _fake_process_help,
+    )
+
+    result = await route_slash_command(form_data)
+
+    assert result == {"status": "success"}
+    assert called["form_data"] == form_data
+
+
+@pytest.mark.asyncio
 async def test_route_interactive_payload_plan_open_modal(monkeypatch):
     payload_data = {
         "type": "block_actions",

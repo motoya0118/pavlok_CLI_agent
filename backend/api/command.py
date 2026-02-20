@@ -739,6 +739,27 @@ async def process_restart(request) -> Dict[str, Any]:
     }
 
 
+async def process_help(request) -> Dict[str, Any]:
+    """
+    ヘルプコマンド処理
+
+    Args:
+        request: FastAPIリクエスト
+
+    Returns:
+        Dict[str, Any]: 処理結果
+    """
+    from backend.slack_ui import help_notification
+
+    blocks = help_notification()
+    return {
+        "status": "success",
+        "response_type": "ephemeral",
+        "text": "鬼コーチのヘルプを表示します",
+        "blocks": blocks,
+    }
+
+
 async def process_config(request, config_data: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     設定コマンド処理

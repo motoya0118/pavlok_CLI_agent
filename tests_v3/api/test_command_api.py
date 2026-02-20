@@ -11,6 +11,7 @@ from backend.api.command import (
     process_plan,
     process_stop,
     process_restart,
+    process_help,
     process_config
 )
 from backend.models import (
@@ -284,6 +285,17 @@ class TestCommandApi:
             assert row.value_type == ConfigValueType.BOOL
         finally:
             session.close()
+
+    @pytest.mark.asyncio
+    async def test_help_command(self):
+        result = await process_help({"user_id": "U_TEST"})
+        assert result["status"] == "success"
+        assert result["response_type"] == "ephemeral"
+        assert "blocks" in result
+        blocks = result["blocks"]
+        assert len(blocks) > 0
+        assert blocks[0]["type"] == "header"
+        assert "/help" in blocks[0]["text"]["text"]
 
     @pytest.mark.asyncio
     async def test_config_get_command(self, v3_db_session):

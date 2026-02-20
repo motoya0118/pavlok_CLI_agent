@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from .api import (
-    process_base_commit, process_plan, process_stop, process_restart, process_config,
+    process_base_commit, process_plan, process_stop, process_restart, process_help, process_config,
     process_plan_submit, process_plan_modal_submit, process_remind_response, process_ignore_response,
     process_plan_open_modal, process_commitment_add_row, process_commitment_remove_row,
 )
@@ -193,6 +193,8 @@ async def route_slash_command(form_data):
         return await process_stop(form_data)
     if command == "/restart":
         return await process_restart(form_data)
+    if command == "/help":
+        return await process_help(form_data)
     if command == "/config":
         return await process_config(form_data)
 

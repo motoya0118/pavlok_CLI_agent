@@ -107,6 +107,28 @@ class TestBlockKitStopRestart:
         assert "▶️" in blocks[0]["text"]["text"]
         assert "鬼コーチを再開しました" in blocks[0]["text"]["text"]
 
+    def test_help_notification_ephemeral(self):
+        """Help notification should include guidance and safety note."""
+        from backend.slack_ui import help_notification
+
+        blocks = help_notification()
+
+        assert isinstance(blocks, list)
+        assert blocks[0]["type"] == "header"
+        assert "/help" in blocks[0]["text"]["text"]
+
+        text_blob = "\n".join(
+            b.get("text", {}).get("text", "")
+            for b in blocks
+            if b.get("type") == "section"
+        )
+        assert "/base_commit" in text_blob
+        assert "/plan" in text_blob
+        assert "/config" in text_blob
+        assert "/stop" in text_blob
+        assert "/restart" in text_blob
+        assert "安全上の注意" in text_blob
+
 
 class TestBlockKitConfig:
     """Test /config modal UI"""

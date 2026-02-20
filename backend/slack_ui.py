@@ -174,7 +174,7 @@ def base_commit_modal(commitments: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # ============================================================================
-# Stop/Restart Notifications (/stop, /restart)
+# Stop/Restart/Help Notifications (/stop, /restart, /help)
 # ============================================================================
 
 def stop_notification() -> list[dict[str, Any]]:
@@ -206,6 +206,114 @@ def restart_notification() -> list[dict[str, Any]]:
                 {
                     "type": "mrkdwn",
                     "text": "次回のWorkerサイクルから通常運用が再開されます",
+                }
+            ],
+        },
+    ]
+
+
+def help_notification() -> list[dict[str, Any]]:
+    """Generate /help notification blocks."""
+    return [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "👹 鬼コーチ /help",
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*アプリ概要*\n"
+                    "鬼コーチは、毎日の習慣を続けるためのサポートアプリです。\n"
+                    "Slack通知とPavlokを使って、行動を最後までやり切れるように支援します。"
+                ),
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*はじめかた（最短1ステップ）*\n"
+                    "1. `/base_commit` で「毎日やること」を登録\n\n"
+                    "※ 通常はこの後、自動で plan 通知が届きます。\n"
+                    "※ すぐに編集したい場合は `/plan` を使って手動で開けます。"
+                ),
+            },
+        },
+        {
+            "type": "divider",
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*コマンド一覧*\n"
+                    "`/base_commit` 毎日やることを登録・編集します\n"
+                    "`/plan` 今日の予定（実行時刻）を手動で確認・更新します\n"
+                    "`/config` 通知や刺激の強さなどを設定します\n"
+                    "`/stop` 鬼コーチを一時停止します\n"
+                    "`/restart` 鬼コーチを再開します\n"
+                    "`/help` このヘルプを表示します"
+                ),
+            },
+        },
+        {
+            "type": "divider",
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*毎日の流れ*\n"
+                    "1. 予定決め: 鬼コーチから届く「予定を登録」通知で、今日の実行時刻を決める（通常はコマンド不要）\n"
+                    "2. 実行確認: 指定時刻に通知が届くので `やりました` / `やれません` を選ぶ\n"
+                    "3. 次の日へ: 回答内容をもとに次の行動につなげる"
+                ),
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*刺激（ペナルティ）について*\n"
+                    "• 通知を無視した場合: 一定時間（初期値: 15分）ごとに再通知され、"
+                    "反応があるまで監視が続きます。無視が続くと刺激が段階的に強くなります。\n"
+                    "• `やれません` を選んだ場合: その場で刺激が実行されます。"
+                    "連続回数が増えるほど強くなります。"
+                ),
+            },
+        },
+        {
+            "type": "divider",
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*安全上の注意（必読）*\n"
+                    "車・自転車・バイクなどの運転中に強い刺激が発生すると、"
+                    "重大な事故につながるおそれがあります。\n"
+                    "Slack通知の時刻は、運転時間と重ならないように必ず設定してください。\n"
+                    "運転する可能性がある時間帯は `/stop` で一時停止し、"
+                    "終了後に `/restart` で再開してください。"
+                ),
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "必要なときはいつでも `/config` で設定を調整してください。",
                 }
             ],
         },
