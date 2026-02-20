@@ -32,17 +32,6 @@ CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
         "min": 0,
         "max": 100,
     },
-    "PAVLOK_TYPE_NOTION": {
-        "default": "vibe",
-        "value_type": ConfigValueType.STR,
-        "allowed": {"zap", "vibe", "beep"},
-    },
-    "PAVLOK_VALUE_NOTION": {
-        "default": "35",
-        "value_type": ConfigValueType.INT,
-        "min": 0,
-        "max": 100,
-    },
     "LIMIT_DAY_PAVLOK_COUNTS": {
         "default": "100",
         "value_type": ConfigValueType.INT,
@@ -53,6 +42,17 @@ CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
         "default": "100",
         "value_type": ConfigValueType.INT,
         "min": 1,
+        "max": 100,
+    },
+    "PAVLOK_TYPE_NOTION": {
+        "default": "vibe",
+        "value_type": ConfigValueType.STR,
+        "allowed": {"zap", "vibe", "beep"},
+    },
+    "PAVLOK_VALUE_NOTION": {
+        "default": "35",
+        "value_type": ConfigValueType.INT,
+        "min": 0,
         "max": 100,
     },
     "IGNORE_INTERVAL": {

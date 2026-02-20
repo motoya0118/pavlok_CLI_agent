@@ -563,6 +563,44 @@ class BlockKitBuilder:
                 }
             },
             {
+                "type": "input",
+                "block_id": "LIMIT_DAY_PAVLOK_COUNTS",
+                "label": {
+                    "type": "plain_text",
+                    "text": "1日の最大ZAP回数"
+                },
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "LIMIT_DAY_PAVLOK_COUNTS_input",
+                    "initial_value": config_values.get("LIMIT_DAY_PAVLOK_COUNTS", "100"),
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "例: 100"
+                    },
+                    "min_length": 1,
+                    "max_length": 4
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "LIMIT_PAVLOK_ZAP_VALUE",
+                "label": {
+                    "type": "plain_text",
+                    "text": "最大ZAP強度 (安全リミット)"
+                },
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "LIMIT_PAVLOK_ZAP_VALUE_input",
+                    "initial_value": config_values.get("LIMIT_PAVLOK_ZAP_VALUE", "100"),
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "0-100の数値"
+                    },
+                    "min_length": 1,
+                    "max_length": 3
+                }
+            },
+            {
                 "type": "divider"
             },
             {
@@ -604,47 +642,6 @@ class BlockKitBuilder:
                     "type": "plain_text_input",
                     "action_id": "PAVLOK_VALUE_NOTION_input",
                     "initial_value": config_values.get("PAVLOK_VALUE_NOTION", "35"),
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "0-100の数値"
-                    },
-                    "min_length": 1,
-                    "max_length": 3
-                }
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "input",
-                "block_id": "LIMIT_DAY_PAVLOK_COUNTS",
-                "label": {
-                    "type": "plain_text",
-                    "text": "1日の最大ZAP回数"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "LIMIT_DAY_PAVLOK_COUNTS_input",
-                    "initial_value": config_values.get("LIMIT_DAY_PAVLOK_COUNTS", "100"),
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "例: 100"
-                    },
-                    "min_length": 1,
-                    "max_length": 4
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "LIMIT_PAVLOK_ZAP_VALUE",
-                "label": {
-                    "type": "plain_text",
-                    "text": "最大ZAP強度 (安全リミット)"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "LIMIT_PAVLOK_ZAP_VALUE_input",
-                    "initial_value": config_values.get("LIMIT_PAVLOK_ZAP_VALUE", "100"),
                     "placeholder": {
                         "type": "plain_text",
                         "text": "0-100の数値"

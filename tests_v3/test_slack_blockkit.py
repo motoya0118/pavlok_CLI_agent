@@ -194,6 +194,19 @@ class TestBlockKitConfig:
         assert notion_value_block is not None
         assert notion_value_block["element"]["initial_value"] == "80"
 
+    def test_config_modal_orders_limits_before_notification(self):
+        """Max count/value should be grouped before notification settings."""
+        from backend.slack_ui import config_modal
+
+        modal = config_modal({})
+        block_ids = [b.get("block_id") for b in modal["blocks"] if b.get("block_id")]
+
+        assert block_ids.index("PAVLOK_TYPE_PUNISH") < block_ids.index("PAVLOK_VALUE_PUNISH")
+        assert block_ids.index("PAVLOK_VALUE_PUNISH") < block_ids.index("LIMIT_DAY_PAVLOK_COUNTS")
+        assert block_ids.index("LIMIT_DAY_PAVLOK_COUNTS") < block_ids.index("LIMIT_PAVLOK_ZAP_VALUE")
+        assert block_ids.index("LIMIT_PAVLOK_ZAP_VALUE") < block_ids.index("PAVLOK_TYPE_NOTION")
+        assert block_ids.index("PAVLOK_TYPE_NOTION") < block_ids.index("PAVLOK_VALUE_NOTION")
+
     def test_config_modal_reset_and_history_buttons(self):
         """Config modal should have reset and history buttons"""
         from backend.slack_ui import config_modal

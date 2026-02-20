@@ -180,6 +180,9 @@ class TestBlockKitBuilder:
             None,
         )
         assert notion_block is not None
+        block_ids = [b.get("block_id") for b in blocks if b.get("block_id")]
+        assert block_ids.index("PAVLOK_VALUE_PUNISH") < block_ids.index("LIMIT_DAY_PAVLOK_COUNTS")
+        assert block_ids.index("LIMIT_PAVLOK_ZAP_VALUE") < block_ids.index("PAVLOK_TYPE_NOTION")
 
     def test_stop_notification_ephemeral(self):
         """Test stop command ephemeral notification"""
