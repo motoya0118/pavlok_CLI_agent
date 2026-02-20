@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -70,15 +70,18 @@ class PunishmentWorker:
         """
         from backend.models import EventType, Schedule, ScheduleState
 
-        in_flight_count = (
+        in_flight_plan_count = (
             self.session.query(Schedule)
-            .filter(Schedule.state.in_([ScheduleState.PENDING, ScheduleState.PROCESSING]))
+            .filter(
+                Schedule.event_type == EventType.PLAN,
+                Schedule.state.in_([ScheduleState.PENDING, ScheduleState.PROCESSING]),
+            )
             .count()
         )
-        if in_flight_count > 0:
+        if in_flight_plan_count > 0:
             logger.info(
-                "Bootstrap skipped: pending+processing schedules exist (%s)",
-                in_flight_count,
+                "Bootstrap skipped: pending+processing plan schedules exist (%s)",
+                in_flight_plan_count,
             )
             return None
 
@@ -91,25 +94,6 @@ class PunishmentWorker:
             return None
 
         now = datetime.now()
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
-        existing_today = (
-            self.session.query(Schedule.id)
-            .filter(
-                Schedule.user_id == user_id,
-                Schedule.event_type == EventType.PLAN,
-                Schedule.run_at >= day_start,
-                Schedule.run_at < day_end,
-            )
-            .first()
-        )
-        if existing_today:
-            logger.info(
-                "Bootstrap skipped: today's plan already exists for user_id=%s schedule_id=%s",
-                user_id,
-                existing_today[0],
-            )
-            return None
 
         schedule = Schedule(
             user_id=user_id,

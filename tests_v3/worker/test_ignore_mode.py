@@ -138,15 +138,26 @@ class TestIgnoreModeDetection:
         schedule = v3_test_data_factory.create_schedule(
             run_at=datetime.now() - timedelta(seconds=8100),  # ignore_time=9
             state=ScheduleState.PROCESSING,
+            thread_ts="1730000000.000001",
         )
         self._set_processing_started_at(v3_db_session, schedule, 8100)
 
         from backend.worker import ignore_mode
 
+        notify_calls = []
         original_send = ignore_mode._send_punishment
+        original_notify = ignore_mode._notify_auto_canceled_once
         ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
+        ignore_mode._notify_auto_canceled_once = (
+            lambda session, s, final_stimulus_type, final_stimulus_value: (
+                notify_calls.append((str(s.id), final_stimulus_type, final_stimulus_value)) or True
+            )
+        )
+
         result = detect_ignore_mode(v3_db_session, schedule)
+
         ignore_mode._send_punishment = original_send
+        ignore_mode._notify_auto_canceled_once = original_notify
 
         assert result["detected"] is True
         assert result["ignore_time"] >= 9
@@ -161,6 +172,7 @@ class TestIgnoreModeDetection:
             .count()
         )
         assert auto_ignore_count == 1
+        assert len(notify_calls) == 1
 
     @pytest.mark.asyncio
     async def test_ignore_max_retry_exceeded_marks_auto_ignore_once(
@@ -170,6 +182,7 @@ class TestIgnoreModeDetection:
         schedule = v3_test_data_factory.create_schedule(
             run_at=datetime.now() - timedelta(seconds=2700),  # ignore_time=3
             state=ScheduleState.PROCESSING,
+            thread_ts="1730000000.000002",
         )
         self._set_processing_started_at(v3_db_session, schedule, 2700)
 
@@ -179,19 +192,27 @@ class TestIgnoreModeDetection:
             "backend.worker.config_cache", fromlist=["get_config"]
         ).get_config
         original_send = ignore_mode._send_punishment
+        original_notify = ignore_mode._notify_auto_canceled_once
 
         def _fake_get_config(key, default=None, session=None):
             if key == "IGNORE_MAX_RETRY":
                 return 2
             return default
 
+        notify_calls = []
         monkeypatch.setattr("backend.worker.config_cache.get_config", _fake_get_config)
         ignore_mode._send_punishment = lambda stimulus_type, value, reason="": True
+        ignore_mode._notify_auto_canceled_once = (
+            lambda session, s, final_stimulus_type, final_stimulus_value: (
+                notify_calls.append((str(s.id), final_stimulus_type, final_stimulus_value)) or True
+            )
+        )
 
         first = detect_ignore_mode(v3_db_session, schedule)
         second = detect_ignore_mode(v3_db_session, schedule)
 
         ignore_mode._send_punishment = original_send
+        ignore_mode._notify_auto_canceled_once = original_notify
         monkeypatch.setattr("backend.worker.config_cache.get_config", original_get_config)
 
         assert first["detected"] is True
@@ -207,3 +228,4 @@ class TestIgnoreModeDetection:
             .count()
         )
         assert auto_ignore_count == 1
+        assert len(notify_calls) == 1

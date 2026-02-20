@@ -39,9 +39,16 @@ git pull origin main
 pip install -e ".[dev]"
 
 # 3. マイグレーション実行（必要な場合）
-alembic upgrade head
+# 重要: alembic.ini は backend/ 配下にあるため、config を明示する
+uv run --project . alembic -c backend/alembic.ini upgrade head
+# もしくは .venv を直接使う場合
+.venv/bin/alembic -c backend/alembic.ini upgrade head
 
-# 4. サービス再起動
+# 4. DB再生成が必要な場合（必要時のみ）
+rm -f oni.db
+uv run --project . alembic -c backend/alembic.ini upgrade head
+
+# 5. サービス再起動
 systemctl restart oni-api
 systemctl restart oni-worker
 ```

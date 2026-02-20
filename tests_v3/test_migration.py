@@ -49,22 +49,35 @@ class TestV3Migration:
             assert hasattr(module, "upgrade")
             assert hasattr(module, "downgrade")
 
-    def test_upgrade_creates_tables(self, v3_db_engine):
+    def test_upgrade_creates_tables(self, tmp_path, monkeypatch):
         """Test that upgrade creates all expected tables."""
         from alembic import command
-        from alembic.config import Config
+        from sqlalchemy import create_engine
 
         backend_root = Path(__file__).resolve().parents[1] / "backend"
         alembic_ini = backend_root / "alembic.ini"
 
-        # Configure Alembic to use test database
-        config = Config(str(alembic_ini))
-        config.set_main_option("sqlalchemy.url", "sqlite:///:memory:")
+        db_path = tmp_path / "upgrade_creates_tables.db"
+        db_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", db_url)
 
-        # Run upgrade using alembic.command
-        with v3_db_engine.begin() as connection:
-            config.attributes["connection"] = connection
-            command.upgrade(config, "head")
+        config = Config(str(alembic_ini))
+        command.upgrade(config, "head")
+
+        engine = create_engine(db_url, future=True)
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            tables = set(inspector.get_table_names())
+
+        expected_tables = {
+            "commitments",
+            "schedules",
+            "action_logs",
+            "punishments",
+            "configurations",
+            "config_audit_log",
+        }
+        assert expected_tables.issubset(tables), f"Missing tables: {expected_tables - tables}"
 
     def test_tables_created_by_models(self, v3_db_session):
         """Test that models.create_all() creates expected tables."""

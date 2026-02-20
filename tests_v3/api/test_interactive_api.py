@@ -36,8 +36,18 @@ from backend.worker.config_cache import invalidate_config_cache
 @pytest.mark.asyncio
 class TestInteractiveApi:
     @pytest.mark.asyncio
-    async def test_plan_submit(self, v3_db_session, v3_test_data_factory):
-        v3_test_data_factory.create_schedule()
+    async def test_plan_submit(self, monkeypatch, tmp_path):
+        db_path = tmp_path / "plan_submit_legacy.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
 
         payload_data = {
             "type": "view_submission",

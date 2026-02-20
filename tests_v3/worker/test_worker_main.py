@@ -30,7 +30,7 @@ class TestPunishmentWorker:
     async def test_bootstrap_inserts_initial_plan_when_no_inflight(
         self, v3_db_session, v3_test_data_factory
     ):
-        """pending/processingが0なら初回planを登録すること"""
+        """PENDING/PROCESSINGのplanが0なら初回planを登録すること"""
         v3_test_data_factory.create_commitment(task="朝のタスク", time="07:00:00")
 
         worker = PunishmentWorker(v3_db_session)
@@ -44,7 +44,7 @@ class TestPunishmentWorker:
 
     @pytest.mark.asyncio
     async def test_bootstrap_skips_when_inflight_exists(self, v3_db_session, v3_test_data_factory):
-        """pending/processingが存在する場合は初回planを登録しないこと"""
+        """PENDING/PROCESSINGのplanが存在する場合は初回planを登録しないこと"""
         v3_test_data_factory.create_schedule(
             event_type=EventType.PLAN,
             run_at=datetime.now() - timedelta(minutes=1),
@@ -59,10 +59,10 @@ class TestPunishmentWorker:
         assert len(schedules) == 1
 
     @pytest.mark.asyncio
-    async def test_bootstrap_skips_when_today_plan_already_exists(
+    async def test_bootstrap_creates_when_only_completed_plan_exists(
         self, v3_db_session, v3_test_data_factory
     ):
-        """同日のplanが既にある場合は初回planを登録しないこと"""
+        """DONE/CANCELEDしかない場合は新しいplanを補充すること"""
         v3_test_data_factory.create_commitment(task="朝のタスク", time="07:00:00")
         v3_test_data_factory.create_schedule(
             event_type=EventType.PLAN,
@@ -73,9 +73,33 @@ class TestPunishmentWorker:
         worker = PunishmentWorker(v3_db_session)
         created_id = await worker.ensure_initial_plan_schedule()
 
-        assert created_id is None
-        schedules = v3_db_session.query(Schedule).all()
-        assert len(schedules) == 1
+        assert created_id is not None
+        schedules = (
+            v3_db_session.query(Schedule).filter(Schedule.event_type == EventType.PLAN).all()
+        )
+        assert len(schedules) == 2
+
+    @pytest.mark.asyncio
+    async def test_bootstrap_ignores_inflight_remind_and_creates_plan(
+        self, v3_db_session, v3_test_data_factory
+    ):
+        """inflightがremindのみならplanを補充すること"""
+        commitment = v3_test_data_factory.create_commitment(task="朝のタスク", time="07:00:00")
+        v3_test_data_factory.create_schedule(
+            event_type=EventType.REMIND,
+            run_at=datetime.now() - timedelta(minutes=10),
+            state=ScheduleState.PROCESSING,
+            commitment_id=commitment.id,
+            comment="朝のタスク",
+        )
+
+        worker = PunishmentWorker(v3_db_session)
+        created_id = await worker.ensure_initial_plan_schedule()
+
+        assert created_id is not None
+        created = v3_db_session.query(Schedule).filter_by(id=created_id).one()
+        assert created.event_type == EventType.PLAN
+        assert created.state == ScheduleState.PENDING
 
     @pytest.mark.asyncio
     async def test_bootstrap_skips_when_only_inactive_commitments(
@@ -194,7 +218,8 @@ class TestPunishmentWorker:
         v3_db_session.commit()
 
         worker = PunishmentWorker(v3_db_session)
-        await worker.monitor_processing_schedules()
+        with patch("backend.worker.ignore_mode._send_punishment", return_value=True):
+            await worker.monitor_processing_schedules()
 
         # Check if punishment was created
         from backend.models import Punishment

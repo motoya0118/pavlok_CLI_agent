@@ -1,15 +1,17 @@
 """Ignore Mode Detection Module"""
 
+import os
 from datetime import datetime
 from typing import Any
 
+import requests
 from sqlalchemy.orm import Session
 
 
 def _safe_int(value: object, default: int) -> int:
     """Convert config-like value to int with fallback."""
     try:
-        return int(value)  # type: ignore[arg-type]
+        return int(value)
     except (TypeError, ValueError):
         return default
 
@@ -49,8 +51,12 @@ def _send_punishment(stimulus_type: str, value: int, reason: str = "") -> bool:
     return bool(isinstance(result, dict) and result.get("success"))
 
 
-def _mark_auto_ignore_once(session: Session, schedule, now: datetime) -> None:
-    """Mark schedule canceled and append AUTO_IGNORE action once."""
+def _mark_auto_ignore_once(session: Session, schedule, now: datetime) -> bool:
+    """Mark schedule canceled and append AUTO_IGNORE action once.
+
+    Returns:
+        True when AUTO_IGNORE row was newly inserted.
+    """
     from backend.models import ActionLog, ActionResult, ScheduleState
 
     schedule.state = ScheduleState.CANCELED
@@ -64,13 +70,120 @@ def _mark_auto_ignore_once(session: Session, schedule, now: datetime) -> None:
         )
         .first()
     )
-    if not existing_auto_ignore:
-        session.add(
-            ActionLog(
-                schedule_id=schedule.id,
-                result=ActionResult.AUTO_IGNORE,
-            )
+    if existing_auto_ignore:
+        return False
+
+    session.add(
+        ActionLog(
+            schedule_id=schedule.id,
+            result=ActionResult.AUTO_IGNORE,
         )
+    )
+    return True
+
+
+def _resolve_task_name_and_time(session: Session, schedule) -> tuple[str, str]:
+    """Resolve display task name/time from schedule for auto-cancel message."""
+    event_type = str(getattr(schedule, "event_type", "")).lower()
+    if hasattr(getattr(schedule, "event_type", None), "value"):
+        event_type = str(getattr(schedule.event_type, "value", "")).lower()
+
+    if event_type == "plan":
+        run_at = getattr(schedule, "run_at", None)
+        if isinstance(run_at, datetime):
+            return "今日の予定を登録", run_at.strftime("%H:%M:%S")
+        return "今日の予定を登録", "--:--:--"
+
+    from backend.models import Commitment
+
+    commitment_id = str(getattr(schedule, "commitment_id", "") or "").strip()
+    if commitment_id:
+        row = (
+            session.query(Commitment.task, Commitment.time)
+            .filter(Commitment.id == commitment_id)
+            .first()
+        )
+        if row:
+            task = str(row[0] or "").strip() or "タスク"
+            time_text = str(row[1] or "").strip() or "--:--:--"
+            return task, time_text
+
+    run_at = getattr(schedule, "run_at", None)
+    time_text = run_at.strftime("%H:%M:%S") if isinstance(run_at, datetime) else "--:--:--"
+    task = str(getattr(schedule, "comment", "") or "").strip() or "タスク"
+    return task, time_text
+
+
+def _resolve_slack_channel() -> str:
+    """Resolve destination channel for worker notifications."""
+    for key in ("SLACK_CHANNEL", "SLACK_CHANNEL_ID", "CHANNEL_ID"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _notify_auto_canceled_once(
+    session: Session,
+    schedule,
+    final_stimulus_type: str,
+    final_stimulus_value: int,
+) -> bool:
+    """Post auto-canceled message to original Slack thread once."""
+    from backend.slack_ui import ignore_max_reached_post
+
+    bot_token = os.getenv("SLACK_BOT_USER_OAUTH_TOKEN", "").strip()
+    channel_id = _resolve_slack_channel()
+    if not bot_token or not channel_id:
+        return False
+
+    task_name, task_time = _resolve_task_name_and_time(session, schedule)
+    blocks = ignore_max_reached_post(
+        task_name=task_name,
+        task_time=task_time,
+        final_punishment={
+            "type": final_stimulus_type,
+            "value": final_stimulus_value,
+        },
+    )
+
+    user_id = str(getattr(schedule, "user_id", "") or "").strip()
+    if user_id:
+        blocks = [
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"<@{user_id}>"},
+            },
+            *blocks,
+        ]
+
+    payload: dict[str, Any] = {
+        "channel": channel_id,
+        "text": "自動キャンセル",
+        "blocks": blocks,
+        "unfurl_links": False,
+        "unfurl_media": False,
+    }
+    thread_ts = str(getattr(schedule, "thread_ts", "") or "").strip()
+    if thread_ts:
+        payload["thread_ts"] = thread_ts
+        payload["reply_broadcast"] = False
+
+    try:
+        response = requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={
+                "Authorization": f"Bearer {bot_token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            json=payload,
+            timeout=2.5,
+        )
+        body = response.json()
+    except (requests.RequestException, ValueError):
+        return False
+
+    return bool(body.get("ok"))
 
 
 def _count_today_zap_executions(session: Session, user_id: str) -> int:
@@ -81,7 +194,6 @@ def _count_today_zap_executions(session: Session, user_id: str) -> int:
 
     now = datetime.now()
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    day_end = day_start.replace(day=day_start.day) + (day_start - day_start)  # keep type
     day_end = day_start.replace(hour=23, minute=59, second=59, microsecond=999999)
 
     return (
@@ -160,7 +272,15 @@ def detect_ignore_mode(session: Session, schedule) -> dict[str, Any]:
         ignore_max_retry = 1
 
     if ignore_time > ignore_max_retry:
-        _mark_auto_ignore_once(session, schedule, now)
+        newly_marked = _mark_auto_ignore_once(session, schedule, now)
+        if newly_marked:
+            final_punishment = calculate_ignore_punishment(ignore_max_retry)
+            _notify_auto_canceled_once(
+                session,
+                schedule,
+                str(final_punishment["type"]),
+                int(final_punishment["value"]),
+            )
         session.commit()
         return {"detected": True, "ignore_time": ignore_time}
 
@@ -204,7 +324,14 @@ def detect_ignore_mode(session: Session, schedule) -> dict[str, Any]:
     )
 
     if stimulus_type == "zap" and value >= 100:
-        _mark_auto_ignore_once(session, schedule, now)
+        newly_marked = _mark_auto_ignore_once(session, schedule, now)
+        if newly_marked:
+            _notify_auto_canceled_once(
+                session,
+                schedule,
+                stimulus_type,
+                value,
+            )
 
     session.commit()
     return {"detected": True, "ignore_time": ignore_time}
