@@ -236,6 +236,138 @@ class TestInteractiveApi:
         session.close()
 
     @pytest.mark.asyncio
+    async def test_plan_modal_submit_uses_plan_rows_metadata_mapping(self, monkeypatch, tmp_path):
+        db_path = tmp_path / "plan_submit_metadata.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        async def _fake_notify_plan_saved(*args, **kwargs):
+            return None
+
+        async def _fake_run_agent_call(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr("backend.api.interactive._notify_plan_saved", _fake_notify_plan_saved)
+        monkeypatch.setattr("backend.api.interactive._run_agent_call", _fake_run_agent_call)
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
+        Session = sessionmaker(bind=engine)
+
+        session = Session()
+        user_id = "U03JBULT484"
+        commitment_1 = Commitment(
+            user_id=user_id,
+            task="朝やる",
+            time="06:00:00",
+            active=False,
+        )
+        commitment_2 = Commitment(
+            user_id=user_id,
+            task="昼やる",
+            time="12:00:00",
+            active=False,
+        )
+        session.add_all([commitment_1, commitment_2])
+        session.commit()
+        commitment_1_id = str(commitment_1.id)
+        commitment_2_id = str(commitment_2.id)
+        session.close()
+
+        payload_data = {
+            "type": "view_submission",
+            "user": {"id": user_id},
+            "view": {
+                "callback_id": "plan_submit",
+                "private_metadata": json.dumps(
+                    {
+                        "user_id": user_id,
+                        "plan_rows": [
+                            {"index": 1, "commitment_id": commitment_1_id, "task": "朝やる"},
+                            {"index": 2, "commitment_id": commitment_2_id, "task": "昼やる"},
+                        ],
+                    }
+                ),
+                "state": {
+                    "values": {
+                        "task_1_date": {
+                            "date": {
+                                "selected_option": {
+                                    "value": "today",
+                                }
+                            }
+                        },
+                        "task_1_time": {
+                            "time": {
+                                "selected_time": "06:00",
+                            }
+                        },
+                        "task_1_skip": {
+                            "skip": {
+                                "selected_options": [],
+                            }
+                        },
+                        "task_2_date": {
+                            "date": {
+                                "selected_option": {
+                                    "value": "today",
+                                }
+                            }
+                        },
+                        "task_2_time": {
+                            "time": {
+                                "selected_time": "12:00",
+                            }
+                        },
+                        "task_2_skip": {
+                            "skip": {
+                                "selected_options": [],
+                            }
+                        },
+                        "next_plan_date": {
+                            "date": {
+                                "selected_option": {
+                                    "value": "tomorrow",
+                                }
+                            }
+                        },
+                        "next_plan_time": {
+                            "time": {
+                                "selected_time": "07:00",
+                            }
+                        },
+                    }
+                },
+            },
+        }
+
+        result = await process_plan_modal_submit(payload_data)
+        assert result["response_action"] == "clear"
+
+        session = Session()
+        remind_schedules = (
+            session.query(Schedule)
+            .filter(
+                Schedule.user_id == user_id,
+                Schedule.event_type == EventType.REMIND,
+                Schedule.state == ScheduleState.PENDING,
+            )
+            .order_by(Schedule.run_at.asc())
+            .all()
+        )
+        assert len(remind_schedules) == 2
+        assert [str(s.commitment_id) for s in remind_schedules] == [
+            commitment_1_id,
+            commitment_2_id,
+        ]
+        session.close()
+
+    @pytest.mark.asyncio
     async def test_plan_modal_submit_records_skip_to_action_logs(self, monkeypatch, tmp_path):
         db_path = tmp_path / "plan_skip.sqlite3"
         database_url = f"sqlite:///{db_path}"

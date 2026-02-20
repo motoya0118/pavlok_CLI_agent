@@ -78,6 +78,48 @@ def _extract_submission_metadata(payload_data: Dict[str, Any]) -> dict[str, str]
     return metadata
 
 
+def _extract_plan_row_map_from_metadata(payload_data: Dict[str, Any]) -> dict[int, dict[str, str]]:
+    """
+    Extract plan row mapping from view.private_metadata.
+    Used by /plan modal to map input row -> commitment_id/task.
+    """
+    view = payload_data.get("view", {})
+    metadata_raw = view.get("private_metadata", "")
+    if not isinstance(metadata_raw, str) or not metadata_raw:
+        return {}
+
+    try:
+        parsed = json.loads(metadata_raw)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+
+    raw_rows = parsed.get("plan_rows", [])
+    if not isinstance(raw_rows, list):
+        return {}
+
+    row_map: dict[int, dict[str, str]] = {}
+    for raw in raw_rows:
+        if not isinstance(raw, dict):
+            continue
+        idx_raw = raw.get("index")
+        if isinstance(idx_raw, int):
+            idx = idx_raw
+        elif isinstance(idx_raw, str) and idx_raw.isdigit():
+            idx = int(idx_raw)
+        else:
+            continue
+        if idx <= 0:
+            continue
+
+        row_map[idx] = {
+            "commitment_id": str(raw.get("commitment_id", "")).strip(),
+            "task": str(raw.get("task", "")).strip(),
+        }
+    return row_map
+
+
 def _build_commitment_summary_message(
     user_id: str, commitments: list[dict[str, str]]
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -995,6 +1037,7 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
             "errors": validation_errors,
         }
 
+    plan_row_map = _extract_plan_row_map_from_metadata(payload_data)
     active_commitments = _load_active_commitments_for_user(user_id)
 
     remind_rows_to_save: list[dict[str, Any]] = []
@@ -1002,16 +1045,20 @@ async def process_plan_modal_submit(payload_data: Dict[str, Any]) -> Dict[str, A
     scheduled_tasks_for_message: list[dict[str, str]] = []
     mapping_errors: Dict[str, str] = {}
     for row in task_rows:
-        commitment_idx = row["index"] - 1
-        if commitment_idx < 0 or commitment_idx >= len(active_commitments):
-            mapping_errors[f"task_{row['index']}_time"] = (
-                "コミットメント情報の整合性が取れませんでした。"
-                "/base_commit から再設定してください。"
-            )
-            continue
+        mapped_commitment = plan_row_map.get(row["index"], {})
+        if not mapped_commitment:
+            commitment_idx = row["index"] - 1
+            if commitment_idx < 0 or commitment_idx >= len(active_commitments):
+                mapping_errors[f"task_{row['index']}_time"] = (
+                    "コミットメント情報の整合性が取れませんでした。"
+                    "/base_commit から再設定してください。"
+                )
+                continue
+            mapped_commitment = active_commitments[commitment_idx]
 
-        mapped_commitment = active_commitments[commitment_idx]
         commitment_id = str(mapped_commitment.get("id", "")).strip()
+        if not commitment_id:
+            commitment_id = str(mapped_commitment.get("commitment_id", "")).strip()
         task_name = mapped_commitment.get("task", "").strip() or f"タスク{row['index']}"
         if not commitment_id:
             mapping_errors[f"task_{row['index']}_time"] = (

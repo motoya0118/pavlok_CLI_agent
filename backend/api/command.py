@@ -2,7 +2,7 @@
 import asyncio
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict
 from collections.abc import Mapping
 
@@ -12,6 +12,9 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.models import (
     Commitment,
+    Schedule,
+    ScheduleState,
+    EventType,
     Configuration,
     ConfigAuditLog,
     ConfigValueType,
@@ -123,6 +126,97 @@ def _load_existing_commitments(user_id: str) -> list[dict[str, str]]:
     except Exception as exc:
         print(f"[{datetime.now()}] failed to load commitments for modal: {exc}")
         return []
+    finally:
+        session.close()
+
+
+def _to_relative_day_value(run_at: datetime) -> str:
+    """Convert absolute datetime to plan modal day select value."""
+    today = datetime.now().date()
+    if run_at.date() <= today:
+        return "today"
+    if run_at.date() == today + timedelta(days=1):
+        return "tomorrow"
+    return "tomorrow"
+
+
+def _load_pending_plan_prefill(user_id: str) -> tuple[list[dict[str, str]], dict[str, str]]:
+    """
+    Load /plan modal prefill from schedules where state is pending.
+    Returns (remind_rows, next_plan).
+    """
+    default_next_plan = {"date": "tomorrow", "time": "07:00"}
+    if not user_id:
+        return [], default_next_plan
+
+    session = _get_session()
+    try:
+        rows = (
+            session.query(Schedule)
+            .filter(
+                Schedule.user_id == user_id,
+                Schedule.state == ScheduleState.PENDING,
+                Schedule.event_type.in_([EventType.REMIND, EventType.PLAN]),
+            )
+            .order_by(Schedule.run_at.asc(), Schedule.created_at.asc())
+            .all()
+        )
+
+        commitment_ids = {
+            str(row.commitment_id)
+            for row in rows
+            if row.event_type == EventType.REMIND and row.commitment_id
+        }
+        commitment_task_map: dict[str, str] = {}
+        if commitment_ids:
+            commitment_rows = (
+                session.query(Commitment.id, Commitment.task)
+                .filter(Commitment.id.in_(list(commitment_ids)))
+                .all()
+            )
+            commitment_task_map = {
+                str(commitment_id): str(task or "").strip()
+                for commitment_id, task in commitment_rows
+            }
+
+        remind_rows: list[dict[str, str]] = []
+        next_plan = default_next_plan.copy()
+        next_plan_set = False
+
+        for row in rows:
+            run_at = row.run_at if isinstance(row.run_at, datetime) else None
+            date_value = _to_relative_day_value(run_at) if run_at else "today"
+            time_value = run_at.strftime("%H:%M") if run_at else "07:00"
+
+            if row.event_type == EventType.REMIND:
+                commitment_id = str(row.commitment_id or "").strip()
+                task_name = commitment_task_map.get(commitment_id, "")
+                if not task_name:
+                    task_name = str(row.comment or "").strip() or "タスク"
+                remind_rows.append(
+                    {
+                        "task": task_name,
+                        "date": date_value,
+                        "time": time_value,
+                        "commitment_id": commitment_id,
+                    }
+                )
+                continue
+
+            if row.event_type == EventType.PLAN and not next_plan_set:
+                next_plan = {
+                    "date": date_value,
+                    "time": time_value,
+                }
+                next_plan_set = True
+
+        if len(remind_rows) > MAX_COMMITMENT_ROWS:
+            remind_rows = remind_rows[:MAX_COMMITMENT_ROWS]
+
+        return remind_rows, next_plan
+    except Exception as exc:
+        print(f"[{datetime.now()}] failed to load pending schedules for /plan modal: {exc}")
+        return [], default_next_plan
     finally:
         session.close()
 
@@ -505,18 +599,28 @@ async def process_plan(request) -> Dict[str, Any]:
     if not isinstance(trigger_id, str):
         trigger_id = ""
 
-    commitments: list[dict[str, str]] = []
+    plan_rows: list[dict[str, str]] = []
+    next_plan_prefill: dict[str, str] = {"date": "tomorrow", "time": "07:00"}
     if user_id:
-        commitments = _load_existing_commitments(user_id)
+        plan_rows, next_plan_prefill = _load_pending_plan_prefill(user_id)
 
-    modal_data = plan_input_modal(commitments)
-    private_metadata: dict[str, str] = {}
+    modal_data = plan_input_modal(plan_rows, next_plan=next_plan_prefill)
+    private_metadata: dict[str, Any] = {}
     if channel_id:
         private_metadata["channel_id"] = channel_id
     if user_id:
         private_metadata["user_id"] = user_id
     if response_url:
         private_metadata["response_url"] = response_url
+    if plan_rows:
+        private_metadata["plan_rows"] = [
+            {
+                "index": idx,
+                "commitment_id": str(row.get("commitment_id", "")).strip(),
+                "task": str(row.get("task", "")).strip(),
+            }
+            for idx, row in enumerate(plan_rows, start=1)
+        ]
     if private_metadata:
         modal_data["private_metadata"] = json.dumps(private_metadata, ensure_ascii=False)
 

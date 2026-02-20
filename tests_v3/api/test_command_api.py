@@ -1,6 +1,8 @@
 # v0.3 Slack Command API Tests
+import json
 import pytest
 from unittest.mock import MagicMock
+from datetime import datetime, timedelta
 from fastapi import Request, HTTPException, status
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -11,7 +13,15 @@ from backend.api.command import (
     process_restart,
     process_config
 )
-from backend.models import Schedule, Base, Commitment, Configuration, ConfigValueType
+from backend.models import (
+    Schedule,
+    Base,
+    Commitment,
+    Configuration,
+    ConfigValueType,
+    EventType,
+    ScheduleState,
+)
 
 
 @pytest.mark.asyncio
@@ -88,7 +98,7 @@ class TestCommandApi:
         assert time3["element"].get("initial_time") == "21:00"
 
     @pytest.mark.asyncio
-    async def test_plan_command_opens_modal_with_existing_commitments(self, tmp_path, monkeypatch):
+    async def test_plan_command_opens_modal_with_pending_schedules(self, tmp_path, monkeypatch):
         db_path = tmp_path / "plan_modal.db"
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})
@@ -97,11 +107,51 @@ class TestCommandApi:
 
         session = Session()
         try:
+            now = datetime.now().replace(second=0, microsecond=0)
+            morning = Commitment(user_id="U_TEST", task="朝", time="07:00:00", active=True)
+            noon = Commitment(user_id="U_TEST", task="昼", time="12:00:00", active=True)
+            night = Commitment(user_id="U_TEST", task="夜", time="21:00:00", active=True)
+            session.add_all([morning, noon, night])
+            session.flush()
+
             session.add_all(
                 [
-                    Commitment(user_id="U_TEST", task="昼", time="12:00:00", active=True),
-                    Commitment(user_id="U_TEST", task="朝", time="07:00:00", active=True),
-                    Commitment(user_id="U_TEST", task="夜", time="21:00:00", active=True),
+                    Schedule(
+                        user_id="U_TEST",
+                        event_type=EventType.REMIND,
+                        commitment_id=morning.id,
+                        run_at=now.replace(hour=7, minute=0),
+                        state=ScheduleState.PENDING,
+                        retry_count=0,
+                        comment="朝",
+                    ),
+                    Schedule(
+                        user_id="U_TEST",
+                        event_type=EventType.REMIND,
+                        commitment_id=night.id,
+                        run_at=(now + timedelta(days=1)).replace(hour=21, minute=0),
+                        state=ScheduleState.PENDING,
+                        retry_count=0,
+                        comment="夜",
+                    ),
+                    Schedule(
+                        user_id="U_TEST",
+                        event_type=EventType.PLAN,
+                        run_at=(now + timedelta(days=1)).replace(hour=8, minute=0),
+                        state=ScheduleState.PENDING,
+                        retry_count=0,
+                        comment="next plan",
+                    ),
+                    # DONE should not be shown in /plan prefill.
+                    Schedule(
+                        user_id="U_TEST",
+                        event_type=EventType.REMIND,
+                        commitment_id=noon.id,
+                        run_at=now.replace(hour=12, minute=0),
+                        state=ScheduleState.DONE,
+                        retry_count=0,
+                        comment="昼",
+                    ),
                 ]
             )
             session.commit()
@@ -138,17 +188,29 @@ class TestCommandApi:
         blocks = view["blocks"]
         first_section = blocks[0]
         second_section = blocks[5]
-        third_section = blocks[10]
         time1 = next(b for b in blocks if b.get("block_id") == "task_1_time")
         time2 = next(b for b in blocks if b.get("block_id") == "task_2_time")
-        time3 = next(b for b in blocks if b.get("block_id") == "task_3_time")
+        date1 = next(b for b in blocks if b.get("block_id") == "task_1_date")
+        date2 = next(b for b in blocks if b.get("block_id") == "task_2_date")
+        next_plan_date = next(b for b in blocks if b.get("block_id") == "next_plan_date")
+        next_plan_time = next(b for b in blocks if b.get("block_id") == "next_plan_time")
 
         assert "朝" in first_section["text"]["text"]
-        assert "昼" in second_section["text"]["text"]
-        assert "夜" in third_section["text"]["text"]
+        assert "夜" in second_section["text"]["text"]
+        assert date1["element"]["initial_option"]["value"] == "today"
+        assert date2["element"]["initial_option"]["value"] == "tomorrow"
         assert time1["element"].get("initial_time") == "07:00"
-        assert time2["element"].get("initial_time") == "12:00"
-        assert time3["element"].get("initial_time") == "21:00"
+        assert time2["element"].get("initial_time") == "21:00"
+        assert next_plan_date["element"]["initial_option"]["value"] == "tomorrow"
+        assert next_plan_time["element"].get("initial_time") == "08:00"
+
+        metadata = json.loads(view["private_metadata"])
+        plan_rows = metadata.get("plan_rows", [])
+        assert len(plan_rows) == 2
+        assert plan_rows[0]["index"] == 1
+        assert plan_rows[0]["task"] == "朝"
+        assert plan_rows[1]["index"] == 2
+        assert plan_rows[1]["task"] == "夜"
 
     @pytest.mark.asyncio
     async def test_stop_command(self, tmp_path, monkeypatch):

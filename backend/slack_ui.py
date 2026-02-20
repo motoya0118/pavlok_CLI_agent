@@ -692,9 +692,22 @@ def _plan_task_blocks(index: int, commitment: dict[str, Any]) -> list[dict[str, 
 
     task = commitment.get("task", f"タスク {index}")
     time = commitment.get("time", "09:00")
+    date_value = commitment.get("date", "today")
+    if date_value not in {"today", "tomorrow"}:
+        date_value = "today"
 
     # Use default time if commitment exists
     initial_time = time[:5] if len(time) >= 5 else "09:00"
+
+    date_options = [
+        {"text": {"type": "plain_text", "text": "今日"}, "value": "today"},
+        {"text": {"type": "plain_text", "text": "明日"}, "value": "tomorrow"},
+    ]
+    initial_date_option = date_options[0]
+    for option in date_options:
+        if option["value"] == date_value:
+            initial_date_option = option
+            break
 
     return [
         {
@@ -714,14 +727,8 @@ def _plan_task_blocks(index: int, commitment: dict[str, Any]) -> list[dict[str, 
             "element": {
                 "type": "static_select",
                 "action_id": "date",
-                "initial_option": {
-                    "text": {"type": "plain_text", "text": "今日"},
-                    "value": "today",
-                },
-                "options": [
-                    {"text": {"type": "plain_text", "text": "今日"}, "value": "today"},
-                    {"text": {"type": "plain_text", "text": "明日"}, "value": "tomorrow"},
-                ],
+                "initial_option": initial_date_option,
+                "options": date_options,
             },
         },
         {
@@ -762,12 +769,35 @@ def _plan_task_blocks(index: int, commitment: dict[str, Any]) -> list[dict[str, 
     ]
 
 
-def plan_input_modal(commitments: list[dict[str, Any]]) -> dict[str, Any]:
+def plan_input_modal(
+    commitments: list[dict[str, Any]],
+    next_plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Generate plan input modal"""
     blocks = []
 
     for i, commitment in enumerate(commitments, 1):
         blocks.extend(_plan_task_blocks(i, commitment))
+
+    next_plan_data = next_plan or {}
+    next_plan_date_value = str(next_plan_data.get("date", "tomorrow"))
+    if next_plan_date_value not in {"today", "tomorrow"}:
+        next_plan_date_value = "tomorrow"
+    next_plan_time = str(next_plan_data.get("time", "07:00"))
+    if len(next_plan_time) >= 5:
+        next_plan_time = next_plan_time[:5]
+    else:
+        next_plan_time = "07:00"
+
+    next_plan_date_options = [
+        {"text": {"type": "plain_text", "text": "今日"}, "value": "today"},
+        {"text": {"type": "plain_text", "text": "明日"}, "value": "tomorrow"},
+    ]
+    next_plan_initial_option = next_plan_date_options[1]
+    for option in next_plan_date_options:
+        if option["value"] == next_plan_date_value:
+            next_plan_initial_option = option
+            break
 
     # Add next plan section
     blocks.extend([
@@ -788,14 +818,8 @@ def plan_input_modal(commitments: list[dict[str, Any]]) -> dict[str, Any]:
             "element": {
                 "type": "static_select",
                 "action_id": "date",
-                "initial_option": {
-                    "text": {"type": "plain_text", "text": "明日"},
-                    "value": "tomorrow",
-                },
-                "options": [
-                    {"text": {"type": "plain_text", "text": "今日"}, "value": "today"},
-                    {"text": {"type": "plain_text", "text": "明日"}, "value": "tomorrow"},
-                ],
+                "initial_option": next_plan_initial_option,
+                "options": next_plan_date_options,
             },
         },
         {
@@ -808,7 +832,7 @@ def plan_input_modal(commitments: list[dict[str, Any]]) -> dict[str, Any]:
             "element": {
                 "type": "timepicker",
                 "action_id": "time",
-                "initial_time": "07:00",
+                "initial_time": next_plan_time,
             },
         },
         {
