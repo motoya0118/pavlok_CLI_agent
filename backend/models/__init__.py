@@ -105,14 +105,14 @@ class Schedule(Base, UUIDMixin, TimestampMixin):
     """全ての実行予定を管理するテーブル"""
     __tablename__ = "schedules"
 
-    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    event_type: Mapped[str] = mapped_column(SQLEnum(EventType), nullable=False)
     commitment_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("commitments.id"),
         nullable=True,
         index=True,
     )
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(SQLEnum(EventType), nullable=False)
     run_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     state: Mapped[str] = mapped_column(SQLEnum(ScheduleState), nullable=False, default=ScheduleState.PENDING)
     thread_ts: Mapped[str | None] = mapped_column(String(50), nullable=True)

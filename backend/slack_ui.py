@@ -966,7 +966,7 @@ def remind_yes_response(task_name: str, comment: str) -> list[dict[str, Any]]:
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"🎉 *{task_name}*\n✓ 完了しました！\n\n{comment}\n> {comment}",
+                "text": f"🎉 *{task_name}*\n✓ 完了しました！\n\n> {comment}",
             },
         },
     ]

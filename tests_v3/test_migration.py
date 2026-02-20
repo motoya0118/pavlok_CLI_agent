@@ -102,10 +102,39 @@ class TestV3Migration:
         columns = {c["name"] for c in inspector.get_columns("schedules")}
 
         expected_columns = {
-            "id", "user_id", "event_type", "commitment_id", "run_at", "state",
+            "id", "commitment_id", "user_id", "event_type", "run_at", "state",
             "thread_ts", "comment", "yes_comment", "no_comment",
             "retry_count", "created_at", "updated_at"
         }
+
+        assert expected_columns == columns, \
+            f"Columns mismatch. Expected: {expected_columns}, Got: {columns}"
+
+    def test_schedules_table_column_order_after_migration(self, tmp_path, monkeypatch):
+        """Test schedules column order after running Alembic migrations."""
+        from sqlalchemy import create_engine
+        from alembic import command
+
+        backend_root = Path(__file__).resolve().parents[1] / "backend"
+        alembic_ini = backend_root / "alembic.ini"
+
+        db_path = tmp_path / "migration_order.db"
+        db_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", db_url)
+
+        config = Config(str(alembic_ini))
+        command.upgrade(config, "head")
+
+        engine = create_engine(db_url, future=True)
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            columns = [c["name"] for c in inspector.get_columns("schedules")]
+
+        expected_columns = [
+            "id", "commitment_id", "user_id", "event_type", "run_at", "state",
+            "thread_ts", "comment", "yes_comment", "no_comment",
+            "retry_count", "created_at", "updated_at",
+        ]
 
         assert expected_columns == columns, \
             f"Columns mismatch. Expected: {expected_columns}, Got: {columns}"
