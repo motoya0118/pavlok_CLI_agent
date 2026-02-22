@@ -145,7 +145,6 @@ User=$SERVICE_USER
 Group=$SERVICE_GROUP
 WorkingDirectory=$APP_DIR
 Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=-$APP_DIR/.env
 ExecStart=$APP_DIR/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port $FASTAPI_PORT
 Restart=always
 RestartSec=5
@@ -168,7 +167,6 @@ User=$SERVICE_USER
 Group=$SERVICE_GROUP
 WorkingDirectory=$APP_DIR
 Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=-$APP_DIR/.env
 ExecStart=$APP_DIR/.venv/bin/python -m backend.worker.worker
 Restart=always
 RestartSec=5

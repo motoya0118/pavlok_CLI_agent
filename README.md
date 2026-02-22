@@ -41,12 +41,7 @@ git clone https://github.com/motoya0118/pavlok_CLI_agent.git
 uv sync
 ```
 
-#### 1-3. DB生成
-```bash
-uv run --project . alembic -c backend/alembic.ini upgrade head
-```
-
-#### 1-4. .envの設定
+#### 1-3. .envの設定
 `sample-env`を参照し、`.env`を作成します
 
 **※ pavlok, slackのenv情報は後続手順で発行し設定します**
@@ -116,27 +111,27 @@ features:
     always_online: false
   slash_commands:
     - command: /base_commit
-      url: {ngorkのurl}
+      url: {ngorkのurl}/slack/gateway
       description: 1日1回絶対にやることをコミットメント
       should_escape: false
     - command: /stop
-      url: {ngorkのurl}
+      url: {ngorkのurl}/slack/gateway
       description: 鬼コーチの監視を停止する
       should_escape: false
     - command: /restart
-      url: {ngorkのurl}
+      url: {ngorkのurl}/slack/gateway
       description: 鬼コーチの監視を再開する
       should_escape: false
     - command: /config
-      url: {ngorkのurl}
+      url: {ngorkのurl}/slack/gateway
       description: 鬼コーチの設定値を確認・更新する
       should_escape: false
     - command: /plan
-      url: {ngorkのurl}
+      url: {ngorkのurl}/slack/gateway
       description: 24時間のplanを更新する
       should_escape: false
     - command: /help
-      url: {ngorkのurl}
+      url: {ngorkのurl}/slack/gateway
       description: 鬼コーチの概要・コマンド説明・注意点
       should_escape: false
 oauth_config:

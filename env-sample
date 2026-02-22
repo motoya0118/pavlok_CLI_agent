@@ -6,6 +6,7 @@ SLACK_BOT_USER_OAUTH_TOKEN={YOUR_API_KEY} # Slack Bot User OAuth Token
 # ===== Slack 設定 =====
 SLACK_CHANNEL={CHANNEL} # 通知を送るSlackチャンネル名またはID
 SLACK_SIGNING_SECRET={YOUR_SIGNING_SECRET} # Slack署名検証用シークレット
+DEFAULT_USER_ID={your_user_id} # デフォルトのSlackユーザーID（ユーザー特定に使用）
 
 # ===== 内部API保護 =====
 ONI_INTERNAL_SECRET={YOUR_INTERNAL_SECRET} # /internal/* エンドポイント保護用シークレット
