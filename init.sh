@@ -55,7 +55,20 @@ resolve_paths() {
   LOG_DIR="${LOG_DIR:-$APP_DIR/backend/log}"
   UNIT_API="${UNIT_API:-oni-api}"
   UNIT_WORKER="${UNIT_WORKER:-oni-worker}"
-  API_HEALTH_URL="${API_HEALTH_URL:-http://127.0.0.1:8000/health}"
+  FASTAPI_PORT="${FASTAPI_PORT:-8000}"
+  SSH_PORT="${SSH_PORT:-22}"
+  API_HEALTH_URL="${API_HEALTH_URL:-http://127.0.0.1:${FASTAPI_PORT}/health}"
+}
+
+validate_port() {
+  local label="$1"
+  local port="$2"
+  if [[ ! "$port" =~ ^[0-9]+$ ]]; then
+    die "$label は数値で指定してください: $port"
+  fi
+  if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+    die "$label は 1-65535 の範囲で指定してください: $port"
+  fi
 }
 
 check_prerequisites() {
@@ -66,6 +79,9 @@ check_prerequisites() {
   [ -d "$APP_DIR" ] || die "APP_DIR が存在しません: $APP_DIR"
   [ -f "$APP_DIR/pyproject.toml" ] || die "pyproject.toml が見つかりません: $APP_DIR"
   [ -f "$APP_DIR/backend/alembic.ini" ] || die "backend/alembic.ini が見つかりません: $APP_DIR"
+
+  validate_port "FASTAPI_PORT" "$FASTAPI_PORT"
+  validate_port "SSH_PORT" "$SSH_PORT"
 }
 
 ensure_env_file() {
@@ -130,7 +146,7 @@ Group=$SERVICE_GROUP
 WorkingDirectory=$APP_DIR
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-$APP_DIR/.env
-ExecStart=$APP_DIR/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+ExecStart=$APP_DIR/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port $FASTAPI_PORT
 Restart=always
 RestartSec=5
 StandardOutput=append:$LOG_DIR/uvicorn.out
@@ -182,6 +198,31 @@ $LOG_DIR/uvicorn.out $LOG_DIR/worker.out {
 EOF
 }
 
+open_firewall_ports() {
+  log "ファイアウォールでポートを開放します (FastAPI: ${FASTAPI_PORT}/tcp, SSH: ${SSH_PORT}/tcp)。"
+
+  if command -v ufw >/dev/null 2>&1; then
+    sudo ufw allow "${FASTAPI_PORT}/tcp"
+    sudo ufw allow "${SSH_PORT}/tcp"
+    log "ufw でポートを開放しました。"
+    return
+  fi
+
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    if sudo firewall-cmd --state >/dev/null 2>&1; then
+      sudo firewall-cmd --permanent --add-port="${FASTAPI_PORT}/tcp"
+      sudo firewall-cmd --permanent --add-port="${SSH_PORT}/tcp"
+      sudo firewall-cmd --reload
+      log "firewalld でポートを開放しました。"
+      return
+    fi
+    warn "firewalld が起動していないためポート開放をスキップします。"
+    return
+  fi
+
+  warn "ufw/firewalld が見つからないためポート開放をスキップします。必要に応じて手動で ${FASTAPI_PORT}/tcp と ${SSH_PORT}/tcp を開放してください。"
+}
+
 start_services() {
   log "systemd をリロードしてサービスを有効化/起動します。"
   sudo systemctl daemon-reload
@@ -216,6 +257,8 @@ show_summary() {
   SERVICE_GROUP: $SERVICE_GROUP
   APP_DIR      : $APP_DIR
   LOG_DIR      : $LOG_DIR
+  FASTAPI_PORT : $FASTAPI_PORT
+  SSH_PORT     : $SSH_PORT
   UNIT_API     : $UNIT_API
   UNIT_WORKER  : $UNIT_WORKER
 
@@ -238,6 +281,7 @@ main() {
   validate_worker_by_tests
   write_systemd_units
   write_logrotate_config
+  open_firewall_ports
   start_services
   verify_api_health
   verify_service_active

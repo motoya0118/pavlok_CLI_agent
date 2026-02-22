@@ -1,225 +1,140 @@
 # Oni System v0.3 ユーザーガイド
 
-## 概要
+## このガイドの位置づけ
 
-Oni System v0.3は、Slackと連携したコミットメント管理システムです。
-Pavlokデバイスを使用して、目標達成をサポートします。
+このドキュメントは、`README.md` の導入手順（セットアップ、Slack/Pavlok連携、API/Worker起動）が完了した後に読む運用ガイドです。  
+インフラ運用（systemd、logrotate、バックアップ）は `documents/v0.3/operations_guide.md` を参照してください。
 
----
+## 1. 最短の使い方
 
-## 1. はじめに
+1. Slackで `/base_commit` を実行し、毎日やるタスクを登録します。
+2. 通常は次のWorkerサイクル（最長約1分）で plan 通知が届きます。すぐ編集したい場合は `/plan` を実行します。
+3. remind 通知に対して `やりました` または `やれません` で応答します。
 
-### 1.1 システム要件
+## 2. Slackコマンド
 
-- Python 3.12
-- Slack Workspace（管理者権限が必要）
-- Pavlokデバイス（オプション）
+### 2.1 `/base_commit`
 
-### 1.2 必要な環境変数
+毎日繰り返すコミットメントを登録・編集します。
 
-以下の環境変数を`.env`ファイルに設定してください：
+- 最大10件まで登録可能です。
+- 送信時は既存コミットメントを洗い替えします。
+- タスク名だけ、時刻だけの行は保存時にバリデーションエラーになります。
 
-```bash
-# インフラ設定
-DATABASE_URL=sqlite:///./app.db
-TIMEZONE=Asia/Tokyo
+### 2.2 `/plan`
 
-# Slack認証
-SLACK_BOT_USER_OAUTH_TOKEN=xoxb-...
-SLACK_USER_OAUTH_TOKEN=xoxp-...
-SLACK_SIGNING_SECRET=...
+「今日の予定」モーダルを手動で開きます。
 
-# Pavlok認証
-PAVLOK_API_KEY=...
+- 各タスクごとに `今日/明日` と実行時刻を設定できます。
+- 各行の `スキップ` をONにすると、その行の remind は作成されません。
+- 送信時に、現在の pending/processing スケジュールを洗い替えし、選択内容で remind と次回 plan を再作成します。
 
-# セキュリティ
-INTERNAL_SECRET=your-internal-secret-key
-AUTHORIZED_USERS=U03JBULT484
-```
+### 2.3 `/config`
 
----
+設定モーダルを開きます。
 
-## 2. Slackコマンド一覧
+- v0.3 のユーザー操作はモーダル更新が前提です。
+- `/config view` `/config reset` `/config rollback` のようなサブコマンドは現行実装ではサポートしていません。
 
-### 2.1 /base_commit
+### 2.4 `/stop`
 
-コミットメント（毎日の予定）を登録・編集します。
+鬼コーチの自動処理を一時停止します。
 
-**使用方法:**
-```
-/base_commit
-```
+- `SYSTEM_PAUSED=true` が設定され、Workerサイクルがスキップされます。
+- 停止中は新規の plan/remind 実行や ignore 監視は進みません。
 
-**表示される内容:**
-- コミットメント入力モーダル
-- 時刻選択機能
-- タスク名入力
+### 2.5 `/restart`
 
-### 2.2 /stop
+`/stop` で停止した処理を再開します。
 
-罰機構を一時停止します。
+- `SYSTEM_PAUSED=false` に戻ります。
+- 次回Workerサイクルから通常処理が再開されます。
 
-**使用方法:**
-```
-/base_commit
-```
+### 2.6 `/help`
 
-**注意:**
-- `/restart`で再開するまで罰は実行されません
-- スケジュールは継続して記録されます
+Slack上でコマンド一覧と利用要点を表示します。
 
-### 2.3 /restart
+## 3. 日次フロー
 
-停止した罰機構を再開します。
+### 3.1 Plan フェーズ
 
-**使用方法:**
-```
-/restart
-```
+1. plan イベントで「予定を登録」通知が届きます。
+2. planモーダル送信後、当日分の remind と次回 plan が登録されます。
 
-### 2.4 /config
+### 3.2 Remind フェーズ
 
-各種設定を変更します。
+1. 指定時刻に remind 通知が届きます。
+2. `やりました` は DONE 記録になります。
+3. `やれません` は NO 記録になり、設定値に応じたPavlok刺激が実行されます。
 
-**使用方法:**
-```
-/config          # 設定モーダルを開く
-/config view     # 現在の設定を表示
-/config reset    # デフォルト値にリセット
-/config rollback <key>  # 特定の設定をロールバック
-```
+### 3.3 Ignore フェーズ（未応答）
 
-**設定可能な項目:**
+- `IGNORE_INTERVAL`（既定900秒）ごとに ignore 判定が走ります。
+- 1回目は `vibe 100`、2回目以降は `zap` を段階的に強化します。
+- `IGNORE_MAX_RETRY` 超過時、または強度上限到達時は対象タスクが自動キャンセルされます。
+
+## 4. 設定項目
+
+### 4.1 `/config` で更新する項目
 
 | 設定キー | デフォルト | 説明 |
-|---------|-----------|------|
-| PAVLOK_TYPE_PUNISH | zap | 罰の種類 (zap/vibe/beep) |
-| PAVLOK_VALUE_PUNISH | 35 | 罰の強度 (0-100) |
-| LIMIT_DAY_PAVLOK_COUNTS | 100 | 1日の最大ZAP回数 |
-| LIMIT_PAVLOK_ZAP_VALUE | 100 | 最大ZAP強度 |
-| IGNORE_INTERVAL | 900 | ignore検知間隔（秒） |
-| IGNORE_JUDGE_TIME | 3 | ignore判定時間（秒） |
-| IGNORE_MAX_RETRY | 5 | ignore最大再試行回数 |
-| COACH_CHARACTOR | うる星やつらのラムちゃん | agent_callコメント生成時の口調 |
+| --- | --- | --- |
+| `PAVLOK_TYPE_PUNISH` | `zap` | NO時の刺激タイプ（`zap`/`vibe`/`beep`） |
+| `PAVLOK_VALUE_PUNISH` | `35` | NO時の基準強度（0-100） |
+| `LIMIT_DAY_PAVLOK_COUNTS` | `100` | 1日のZAP実行上限回数 |
+| `LIMIT_PAVLOK_ZAP_VALUE` | `100` | ZAP強度の上限 |
+| `PAVLOK_TYPE_NOTION` | `vibe` | 通知時の刺激タイプ（`zap`/`vibe`/`beep`） |
+| `PAVLOK_VALUE_NOTION` | `35` | 通知時の刺激強度（0-100） |
+| `IGNORE_INTERVAL` | `900` | ignore判定間隔（秒。300/600/900/1800） |
+| `IGNORE_JUDGE_TIME` | `3` | ignore判定時間（秒） |
+| `IGNORE_MAX_RETRY` | `5` | ignore最大再試行回数 |
+| `COACH_CHARACTOR` | `うる星やつらのラムちゃん` | コメント生成時の口調設定（最大100文字） |
 
-**`.env`で管理する項目（/configでは非表示）:**
+### 4.2 `.env` でのみ管理する項目
 
 | 設定キー | デフォルト | 説明 |
-|---------|-----------|------|
-| TIMEOUT_REMIND | 600 | リマインドタイムアウト（秒） |
-| TIMEOUT_REVIEW | 600 | 振り返りタイムアウト（秒） |
-| RETRY_DELAY | 5 | リトライ遅延（分） |
+| --- | --- | --- |
+| `TIMEOUT_REMIND` | `600` | remind応答タイムアウト（秒） |
+| `TIMEOUT_REVIEW` | `600` | 振り返り応答タイムアウト（秒） |
+| `RETRY_DELAY` | `5` | Workerリトライ遅延（分） |
 
----
+## 5. 環境変数メモ（ユーザー向け）
 
-## 3. イベントフロー
+`env-sample` を基準に、少なくとも次を設定してください。
 
-### 3.1 Plan イベント
+- `PAVLOK_API_KEY`
+- `SLACK_BOT_USER_OAUTH_TOKEN`
+- `SLACK_CHANNEL`（または `SLACK_CHANNEL_ID`）
+- `SLACK_SIGNING_SECRET`
+- `DATABASE_URL`（未指定時は `sqlite:///./oni.db`）
 
-毎日指定時刻に「今日の予定」を登録するリマインドが届きます。
+内部APIを利用する構成では `ONI_INTERNAL_SECRET` も設定してください。
 
-1. Workerがplanイベントを検知
-2. Slackに「予定を登録」ボタン付きメッセージを投稿
-3. ボタンをクリックしてモーダルを開く
-4. 予定を入力して送信
-5. 各時刻にremindイベントがスケジュールされる
+## 6. トラブルシューティング
 
-### 3.2 Remind イベント
+### 6.1 Slashコマンドが401になる
 
-登録した時刻にリマインドが届きます。
+- `SLACK_SIGNING_SECRET` の設定値とSlack App側の Signing Secret を一致させてください。
+- Slack Appの Request URL が `/slack/gateway` または `/slack/command`/`/slack/interactive` の正しいエンドポイントを向いているか確認してください。
 
-1. Workerがremindイベントを検知
-2. Slackに「やりました！/やれません」ボタン付きメッセージを投稿
-3. ボタンをクリックして応答
-4. YES → 完了メッセージ
-5. NO → Pavlok実行 + 罰メッセージ
+### 6.2 `/plan` や `/config` でモーダルが開かない
 
-### 3.3 Ignore モード
+- Slackから直接スラッシュコマンドを実行し、`trigger_id` が渡る経路で再実行してください。
+- `SLACK_BOT_USER_OAUTH_TOKEN` の権限を確認してください。
 
-応答がない場合の自動対応です。
+### 6.3 remindが来ない
 
-1. 指定時間（デフォルト15分）経過で検知
-2. 初回: vibe（振動）100%
-3. 2回目以降: zap（電気ショック）35%〜最大100%
-4. 最大到達時: タスク自動キャンセル
+- Workerが起動しているか確認してください。
+- `/stop` で停止中の場合は `/restart` を実行してください。
+- `/base_commit` で有効なコミットメントが登録されているか確認してください。
 
----
+### 6.4 Pavlok刺激が来ない
 
-## 4. セキュリティ
+- `PAVLOK_API_KEY` が有効か確認してください。
+- デバイスがアカウントに紐付いてオンラインか確認してください。
+- `LIMIT_DAY_PAVLOK_COUNTS` に到達していないか確認してください。
 
-### 4.1 認可ユーザー
+## 7. 関連ドキュメント
 
-`AUTHORIZED_USERS`に含まれるユーザーのみがコマンドを実行できます。
-
-### 4.2 罠強度の制限
-
-- 最大強度は`LIMIT_PAVLOK_ZAP_VALUE`で制限されます
-- 1日の最大回数は`LIMIT_DAY_PAVLOK_COUNTS`で制限されます
-- 強度80以上は警告が表示されます
-
----
-
-## 5. トラブルシューティング
-
-### 5.1 コマンドが反応しない
-
-- Slack Appの権限を確認してください
-- `AUTHORIZED_USERS`に自分のユーザーIDが含まれているか確認してください
-
-### 5.2 Pavlokが動作しない
-
-- Pavlok APIキーが正しいか確認してください
-- Pavlokデバイスがオンラインか確認してください
-
-### 5.3 テスト実行方法
-
-```bash
-# 全テスト実行
-pytest tests_v3/
-
-# 特定のテストのみ
-pytest tests_v3/worker/
-pytest tests_v3/api/
-```
-
----
-
-## 6. 運用
-
-### 6.1 起動方法
-
-```bash
-# FastAPIサーバー起動
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
-
-# Worker起動（別プロセス）
-python -m backend.worker.worker
-```
-
-### 6.2 ログ確認
-
-```bash
-# サーバーログ
-tail -f logs/server.log
-
-# Workerログ
-tail -f logs/worker.log
-```
-
-### 6.3 設定変更の監査
-
-設定変更は`config_audit_log`テーブルに記録されます。
-
-```sql
-SELECT * FROM config_audit_log ORDER BY changed_at DESC LIMIT 10;
-```
-
----
-
-## 7. サポート
-
-問題が発生した場合は、以下の情報を添えて報告してください：
-
-- エラーメッセージ
-- 実行したコマンド
-- ログの該当箇所
+- セットアップ全体: `README.md`
+- サービス運用: `documents/v0.3/operations_guide.md`

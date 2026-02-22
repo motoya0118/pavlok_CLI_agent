@@ -1,85 +1,161 @@
 # Oni System v0.3 運用手順書
 
-## 1. デプロイ手順
+## 0. このドキュメントの位置づけ
 
-### 1.1 前提条件
+この手順書は `README.md` と `documents/v0.3/user_guide.md` を完了した後に、
+本番/常駐サーバー運用を行う担当者向けの手順です。
 
-- Python 3.12
-- SQLite 3
-- 環境変数設定済み（`.env`ファイル）
+- `README.md`: 初期セットアップ、Slack/Pavlok連携、ローカル起動
+- `documents/v0.3/user_guide.md`: エンドユーザー操作
+- `documents/v0.3/operations_guide.md`: サーバー構築、常駐運用、監視、復旧
 
-### 1.2 初回デプロイ
+## 1. 新規サーバー準備（v0.2内容を統合）
+
+### 1.1 セキュリティグループ/ファイアウォール
+
+最低限、次を許可します。
+
+- `22/tcp`: 運用者IPのみ（SSH）
+- `8000/tcp`: APIを直接公開する場合のみ
+
+補足:
+
+- リバースプロキシ配下で運用する場合は `8000/tcp` を閉じ、プロキシからの到達だけ許可してください。
+- v0.2で詰まりやすかった通り、クラウド側のセキュリティグループ割り当て漏れがあるとSSHできません。
+
+### 1.2 初回SSHと一般ユーザー作成
+
+初回のみ root で接続し、一般ユーザーを作成します。
 
 ```bash
-# 1. リポジトリをクローン
-git clone <repository-url>
+ssh root@<VPS_IP>
+adduser <service_user>
+usermod -aG sudo <service_user>
+```
+
+作成後は一般ユーザーで再接続します。
+
+```bash
+exit
+ssh <service_user>@<VPS_IP>
+sudo -v
+```
+
+### 1.3 SSH鍵ログイン化とroot封印（推奨）
+
+ローカルで鍵未作成なら作成します。
+
+```bash
+ssh-keygen -t ed25519
+ssh-copy-id <service_user>@<VPS_IP>
+```
+
+`/etc/ssh/sshd_config` を調整します。
+
+```text
+PermitRootLogin no
+PasswordAuthentication no
+```
+
+反映:
+
+```bash
+sudo systemctl restart ssh
+```
+
+注意:
+
+- 先に別ターミナルで一般ユーザーSSHが成功することを確認してから root ログイン禁止を適用してください。
+
+## 2. デプロイ
+
+### 2.1 推奨: `init.sh` で自動セットアップ
+
+`init.sh` は以下をまとめて実行します。
+
+- `uv` 導入
+- 依存同期 (`uv sync --extra dev`)
+- Alembic migration
+- `pytest -q` による最低限の健全性確認
+- systemd unit 反映
+- logrotate設定
+- サービス起動とヘルスチェック
+
+手順:
+
+```bash
+# サーバー上
+cd ~
+git clone https://github.com/motoya0118/pavlok_CLI_agent.git
 cd pavlok_CLI_agent
 
-# 2. 仮想環境作成
-python -m venv .venv
-source .venv/bin/activate
+# .env作成
+cp env-sample .env
+# 必須値を編集: PAVLOK_API_KEY, SLACK_BOT_USER_OAUTH_TOKEN, SLACK_SIGNING_SECRET, ONI_INTERNAL_SECRET, SLACK_CHANNEL
 
-# 3. 依存関係インストール
-pip install -e ".[dev]"
-
-# 4. データベース初期化
-python -c "from backend.models import Base, create_engine; engine = create_engine('sqlite:///app.db'); Base.metadata.create_all(engine)"
-
-# 5. 初期設定値を投入
-python scripts/init_config.py
+# 自動セットアップ実行
+bash init.sh
 ```
 
-### 1.3 アップデート
+### 2.2 ソース持ち込み方針（v0.2運用タスクを統合）
+
+- Dockerは使わず、サーバー上に直接実行環境を構築します。
+- 通常は `git clone` を推奨します。
+- 何らかの理由でファイルコピー配備する場合は、最低限次を揃えてください。
+  - `.codex`
+  - `prompts`
+  - `scripts`
+  - `backend`
+  - `documents`
+  - ルート直下の設定ファイル群（`pyproject.toml`, `uv.lock`, `env-sample` など）
+
+### 2.3 既存データ引き継ぎ（任意）
+
+ローカルのSQLiteデータを引き継ぐ場合のみ実施します。
 
 ```bash
-# 1. コードをプル
-git pull origin main
-
-# 2. 依存関係を更新
-pip install -e ".[dev]"
-
-# 3. マイグレーション実行（必要な場合）
-# 重要: alembic.ini は backend/ 配下にあるため、config を明示する
-uv run --project . alembic -c backend/alembic.ini upgrade head
-# もしくは .venv を直接使う場合
-.venv/bin/alembic -c backend/alembic.ini upgrade head
-
-# 4. DB再生成が必要な場合（必要時のみ）
-rm -f oni.db
-uv run --project . alembic -c backend/alembic.ini upgrade head
-
-# 5. サービス再起動
-systemctl restart oni-api
-systemctl restart oni-worker
+# ローカルで実行
+scp /path/to/oni.db <service_user>@<VPS_IP>:~/pavlok_CLI_agent/oni.db
 ```
 
----
+`DATABASE_URL` を `.env` で独自設定している場合は、そのDB実体を引き継いでください。
 
-## 2. サービス管理
+### 2.4 Codexをサーバーで使う場合（任意）
 
-### 2.1 systemdサービス定義
-
-`init.sh` から流用できるよう、実行ユーザーを動的解決する手順にします。
+v0.2運用タスクで使っていた手順を踏襲します。
 
 ```bash
-# sudo 実行時は SUDO_USER を優先。未指定なら現在ユーザー。
+# ローカルで実行
+scp ~/.codex/auth.json <service_user>@<VPS_IP>:~/.codex/auth.json
+scp ~/.codex/config.toml <service_user>@<VPS_IP>:~/.codex/config.toml
+```
+
+サーバー上で確認:
+
+```bash
+codex exec こんにちは
+```
+
+## 3. systemd サービス管理
+
+### 3.1 ユニット定義（手動管理する場合）
+
+`init.sh` を使わず手動運用する場合のみ必要です。
+
+```bash
 export SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$USER}}"
 export SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
 export SERVICE_HOME="${SERVICE_HOME:-$(getent passwd "$SERVICE_USER" | cut -d: -f6)}"
-if [ -z "$SERVICE_HOME" ]; then
-  export SERVICE_HOME="/home/$SERVICE_USER"
-fi
+[ -z "$SERVICE_HOME" ] && export SERVICE_HOME="/home/$SERVICE_USER"
 
-# 必要なら外から上書き可能
 export APP_DIR="${APP_DIR:-$SERVICE_HOME/pavlok_CLI_agent}"
 export LOG_DIR="${LOG_DIR:-$APP_DIR/backend/log}"
-
 mkdir -p "$LOG_DIR"
 ```
 
 ```bash
 # /etc/systemd/system/oni-api.service
-sudo tee /etc/systemd/system/oni-api.service >/dev/null <<EOF
+sudo tee /etc/systemd/system/oni-api.service >/dev/null <<EOF_UNIT
 [Unit]
 Description=Oni System FastAPI
 After=network-online.target
@@ -100,12 +176,12 @@ StandardError=append:$LOG_DIR/uvicorn.out
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOF_UNIT
 ```
 
 ```bash
 # /etc/systemd/system/oni-worker.service
-sudo tee /etc/systemd/system/oni-worker.service >/dev/null <<EOF
+sudo tee /etc/systemd/system/oni-worker.service >/dev/null <<EOF_UNIT
 [Unit]
 Description=Oni System Worker
 After=network-online.target
@@ -126,29 +202,20 @@ StandardError=append:$LOG_DIR/worker.out
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOF_UNIT
 ```
 
-### 2.2 サービス操作コマンド
+適用:
 
 ```bash
-# 変数を設定（2.1と同じ）
-export SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$USER}}"
-export SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
-export SERVICE_HOME="${SERVICE_HOME:-$(getent passwd "$SERVICE_USER" | cut -d: -f6)}"
-if [ -z "$SERVICE_HOME" ]; then
-  export SERVICE_HOME="/home/$SERVICE_USER"
-fi
-export APP_DIR="${APP_DIR:-$SERVICE_HOME/pavlok_CLI_agent}"
-export LOG_DIR="${LOG_DIR:-$APP_DIR/backend/log}"
-
-# ユニット反映
 sudo systemctl daemon-reload
-
-# 自動起動有効化 + 起動
 sudo systemctl enable --now oni-api oni-worker
+```
 
-# 稼働確認
+### 3.2 日常操作
+
+```bash
+# 状態確認
 sudo systemctl status oni-api --no-pager
 sudo systemctl status oni-worker --no-pager
 sudo systemctl is-active oni-api oni-worker
@@ -156,41 +223,23 @@ sudo systemctl is-active oni-api oni-worker
 # 再起動
 sudo systemctl restart oni-api oni-worker
 
-# 停止
+# 停止/起動
 sudo systemctl stop oni-api oni-worker
-
-# 起動
 sudo systemctl start oni-api oni-worker
 
 # ヘルスチェック
 curl -sS http://127.0.0.1:8000/health
+# 期待例: {"status":"ok", ...}
 
-# ログ確認（journal）
+# ログ
 sudo journalctl -u oni-api -f
 sudo journalctl -u oni-worker -f
-
-# ログ確認（ファイル）
-tail -f "$LOG_DIR/uvicorn.out"
-tail -f "$LOG_DIR/worker.out"
 ```
 
-### 2.3 ログローテート設定（必須）
-
-`systemd` で `StandardOutput=append:` を使っているため、`logrotate` で肥大化を防ぎます。
+### 3.3 logrotate（必須）
 
 ```bash
-# 変数を設定（2.1と同じ）
-export SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$USER}}"
-export SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
-export SERVICE_HOME="${SERVICE_HOME:-$(getent passwd "$SERVICE_USER" | cut -d: -f6)}"
-if [ -z "$SERVICE_HOME" ]; then
-  export SERVICE_HOME="/home/$SERVICE_USER"
-fi
-export APP_DIR="${APP_DIR:-$SERVICE_HOME/pavlok_CLI_agent}"
-export LOG_DIR="${LOG_DIR:-$APP_DIR/backend/log}"
-
-# /etc/logrotate.d/oni-system
-sudo tee /etc/logrotate.d/oni-system >/dev/null <<EOF
+sudo tee /etc/logrotate.d/oni-system >/dev/null <<EOF_ROTATE
 $LOG_DIR/uvicorn.out $LOG_DIR/worker.out {
     daily
     rotate 14
@@ -203,165 +252,110 @@ $LOG_DIR/uvicorn.out $LOG_DIR/worker.out {
     su $SERVICE_USER $SERVICE_GROUP
     create 0640 $SERVICE_USER $SERVICE_GROUP
 }
-EOF
+EOF_ROTATE
 
-# 設定確認（dry run）
 sudo logrotate -d /etc/logrotate.d/oni-system
-
-# 手動実行テスト
 sudo logrotate -f /etc/logrotate.d/oni-system
-
-# 反映確認
-ls -lh "$LOG_DIR"
 ```
 
----
+## 4. バックアップと復元
 
-## 3. バックアップと復元
-
-### 3.1 データベースバックアップ
+SQLite運用（`DATABASE_URL` 未変更時）を前提に記載します。
 
 ```bash
-# 手動バックアップ
-sqlite3 app.db ".backup 'backup/app.db.$(date +%Y%m%d_%H%M%S)'"
-
-# cronで毎日バックアップ
-# crontab -e
-0 3 * * * sqlite3 /opt/oni/app.db ".backup '/opt/oni/backup/app.db.$(date +\%Y\%m\%d_\%H\%M\%S)'"
+export APP_DIR="${APP_DIR:-$HOME/pavlok_CLI_agent}"
+export DB_PATH="${DB_PATH:-$APP_DIR/oni.db}"
+mkdir -p "$APP_DIR/backup"
 ```
 
-### 3.2 復元手順
+### 4.1 バックアップ
 
 ```bash
-# サービス停止
-systemctl stop oni-api oni-worker
-
-# バックアップから復元
-cp /opt/oni/backup/app.db.20260214_030000 /opt/oni/app.db
-
-# サービス再開
-systemctl start oni-api oni-worker
+sqlite3 "$DB_PATH" ".backup '$APP_DIR/backup/oni.db.$(date +%Y%m%d_%H%M%S)'"
 ```
 
----
-
-## 4. 監視
-
-### 4.1 ヘルスチェック
+cron例:
 
 ```bash
-# APIヘルスチェック
-curl http://localhost:8000/health
-
-# 期待されるレスポンス
-{"status": "healthy"}
+0 3 * * * sqlite3 /home/<service_user>/pavlok_CLI_agent/oni.db ".backup '/home/<service_user>/pavlok_CLI_agent/backup/oni.db.$(date +\%Y\%m\%d_\%H\%M\%S)'"
 ```
 
-### 4.2 ログ監視
+### 4.2 復元
 
-重要なログパターン：
+```bash
+sudo systemctl stop oni-api oni-worker
+cp /home/<service_user>/pavlok_CLI_agent/backup/oni.db.<timestamp> /home/<service_user>/pavlok_CLI_agent/oni.db
+sudo systemctl start oni-api oni-worker
+```
+
+## 5. 監視
+
+### 5.1 最低限の監視項目
+
+- APIヘルス (`/health`)
+- `oni-api` / `oni-worker` の systemd active 状態
+- DBファイルサイズ
+- Pavlok実行回数（上限到達の頻度）
+
+### 5.2 ログ監視の目安
 
 | パターン | 重要度 | 対応 |
-|---------|-------|------|
-| `Error processing schedule` | ERROR | スケジュール処理エラーを調査 |
-| `Script execution failed` | ERROR | スクリプト実行エラーを調査 |
-| `Slack signature verification failed` | WARN | セキュリティ警告 |
-| `Daily zap limit reached` | INFO | 日次上限到達（正常） |
+| --- | --- | --- |
+| `Error processing schedule` | ERROR | schedule処理失敗。対象IDを追跡して再実行可否を判断 |
+| `Script execution failed` | ERROR | `plan.py`/`remind.py` の実行失敗 |
+| `Invalid signature` | WARN | Slack署名不一致。`SLACK_SIGNING_SECRET` とSlack App設定を確認 |
+| `daily zap limit reached` | INFO | 1日上限到達。設定見直し判断材料 |
 
-### 4.3 メトリクス
+## 6. トラブルシューティング
 
-監視すべきメトリクス：
-
-- API レスポンスタイム
-- Worker 処理数/分
-- データベースサイズ
-- 罰実行回数/日
-
----
-
-## 5. トラブルシューティング
-
-### 5.1 APIが起動しない
+### 6.1 APIが起動しない
 
 ```bash
-# ポート使用状況確認
 lsof -i :8000
-
-# 環境変数確認
-env | grep -E "(SLACK|PAVLOK|DATABASE)"
-
-# ログ確認
-journalctl -u oni-api -n 100
+sudo journalctl -u oni-api -n 100 --no-pager
 ```
 
-### 5.2 Workerが動作しない
+確認ポイント:
+
+- `.env` の必須値不足
+- `.venv` 不整合（`uv sync --extra dev` を再実行）
+
+### 6.2 Workerが動かない
 
 ```bash
-# プロセス確認
-ps aux | grep worker
-
-# データベース接続確認
-sqlite3 app.db "SELECT COUNT(*) FROM schedules WHERE state='pending'"
-
-# ログ確認
-journalctl -u oni-worker -n 100
+sudo journalctl -u oni-worker -n 100 --no-pager
+sqlite3 ~/pavlok_CLI_agent/oni.db "SELECT COUNT(*) FROM schedules WHERE state='pending';"
 ```
 
-### 5.3 Slack連携エラー
+### 6.3 Slack連携で401が出る
 
-1. Slack Appの設定を確認
-2. OAuthトークンが有効か確認
-3. Webhook URLが正しいか確認
-4. 署名検証が正しく設定されているか確認
+- `SLACK_SIGNING_SECRET` がSlack Appの値と一致しているか
+- Slack Request URLが正しいか（`/slack/gateway` など）
 
-### 5.4 Pavlok連携エラー
+### 6.4 Pavlok連携が失敗する
 
-1. APIキーが有効か確認
-2. デバイスがオンラインか確認
-3. APIレート制限に達していないか確認
+- `PAVLOK_API_KEY` の有効性
+- デバイスのオンライン状態
+- 日次上限 (`LIMIT_DAY_PAVLOK_COUNTS`) 到達状況
 
----
+## 7. アップデート手順（安全版）
 
-## 6. セキュリティ運用
+```bash
+cd ~/pavlok_CLI_agent
+git pull origin main
+uv sync --extra dev
+.venv/bin/alembic -c backend/alembic.ini upgrade head
+sudo systemctl restart oni-api oni-worker
+curl -sS http://127.0.0.1:8000/health
+```
 
-### 6.1 定期確認事項
+注意:
 
-- [ ] アクセスログの異常がないか
-- [ ] 設定変更監査ログの確認
-- [ ] 認可ユーザーリストの更新
-- [ ] APIキーのローテーション
+- 通常アップデートで `oni.db` を削除しないでください。
 
-### 6.2 インシデント対応
+## 8. 定期運用チェックリスト
 
-1. 異常を検知したら即座にサービスを停止
-2. ログを保全
-3. 原因を調査
-4. 必要に応じて認証情報をローテーション
-5. 修正後にサービス再開
-
----
-
-## 7. 考慮ポイント
-
-### 7.1 スケーラビリティ
-
-- 現在の設計は1ユーザー・1サーバー前提
-- 将来的なマルチユーザー対応はDBスキーマで準備済み
-
-### 7.2 可用性
-
-- APIとWorkerは独立して動作可能
-- Workerが停止してもAPIは機能する（ただし処理は滞留）
-- APIが停止してもWorkerは1分間隔で処理を継続
-
-### 7.3 パフォーマンス
-
-- 設定値は60秒キャッシュされる
-- DBはSQLiteのため、大量データには注意
-- Slack APIのレート制限に注意
-
----
-
-## 8. 連絡先
-
-技術的な問題については、開発チームまでお問い合わせください。
+- [ ] `sudo systemctl is-active oni-api oni-worker` が `active`
+- [ ] `SLACK_SIGNING_SECRET` / `ONI_INTERNAL_SECRET` / `PAVLOK_API_KEY` のローテーション計画がある
+- [ ] `backup/` に日次バックアップが生成されている
+- [ ] `uvicorn.out` / `worker.out` の肥大化が抑制されている
