@@ -1,0 +1,125 @@
+# v0.3 Signature Middleware Tests
+import pytest
+from unittest.mock import MagicMock
+from fastapi import Request, HTTPException, status
+from backend.api.signature import verify_slack_signature, SignatureVerificationError, verify_signature_middleware
+
+
+@pytest.mark.asyncio
+class TestSignatureMiddleware:
+    """Test Slack signature verification middleware"""
+
+    async def test_valid_signature_verification(self):
+        """Test valid signature passes verification"""
+        timestamp = "1531420620005"
+        signing_secret = "test-secret"
+        signature = "v0:" + hashlib.sha256((timestamp + "v0:" + signing_secret).encode()).hexdigest()
+
+        # Valid request mock
+        request = MagicMock(spec=Request)
+        request.headers = {
+            "X-Slack-Request-Timestamp": timestamp,
+            "X-Slack-Signature": signature
+        }
+        request.body = None  # GET request, no body
+
+        # Should pass
+        assert await verify_signature_middleware(request, MagicMock()) is None
+        assert await verify_slack_signature(timestamp, signature, None) is True
+
+    @pytest.mark.asyncio
+    async def test_invalid_signature_rejection(self):
+        """Test invalid signature is rejected"""
+        timestamp = "1531420620005"
+        signing_secret = "test-secret"
+        signature = "v0:invalid"
+
+        request = MagicMock(spec=Request)
+        request.headers = {
+            "X-Slack-Request-Timestamp": timestamp,
+            "X-Slack-Signature": signature
+        }
+        request.body = None
+
+        # Should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            response = await verify_signature_middleware(request, MagicMock())
+            assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_missing_signature_rejection(self):
+        """Test missing signature is rejected"""
+        signing_secret = "test-secret"
+        timestamp = "1531420620005"
+
+        request = MagicMock(spec=Request)
+        request.headers = {
+            "X-Slack-Request-Timestamp": timestamp,
+            # No signature header
+        }
+        request.body = None
+
+        # Should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            response = await verify_signature_middleware(request, MagicMock())
+            assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_request_with_body(self):
+        """Test request body is properly handled"""
+        timestamp = "1531420620005"
+        signing_secret = "test-secret"
+        body_str = "test-body-content"
+        signature = "v0:" + hashlib.sha256((timestamp + "v0:" + signing_secret).encode()).hexdigest()
+
+        # Compute expected signature for body
+        body_hash = hmac.new(signing_secret, msg=body_str.encode(), digestmod=hashlib.sha256).hexdigest()
+        expected_b64 = f"v0:{body_hash.hex()}"
+
+        request = MagicMock(spec=Request)
+        request.headers = {
+            "X-Slack-Request-Timestamp": timestamp,
+            "X-Slack-Signature": signature
+        }
+        request._body = body_str
+
+        # Mock response
+        response = await verify_signature_middleware(request, MagicMock())
+        assert response is None  # Should pass when signature matches
+
+    @pytest.mark.asyncio
+    async def test_skip_internal_paths(self):
+        """Test that internal paths are skipped"""
+        skip_paths = ["/internal/", "/health", "/docs"]
+        for path in skip_paths:
+            request = MagicMock(spec=Request)
+            request.url = MagicMock(path=path, query="", scheme="https")
+
+            call_next_called = False
+            async def mock_call_next(request):
+                nonlocal call_next_called
+                return await call_next(request)
+
+            await verify_signature_middleware(request, mock_call_next)
+            assert call_next_called is True  # Should skip
+
+    @pytest.mark.asyncio
+    async def test_replay_attack_prevention(self):
+        """Test timestamp freshness to prevent replay attacks"""
+        # Old timestamp (more than 5 minutes old)
+        old_timestamp = "1531420620000"  # 5 minutes before
+
+        request = MagicMock(spec=Request)
+        request.headers = {
+            "X-Slack-Request-Timestamp": old_timestamp,
+            "X-Slack-Signature": "v0:valid"
+        }
+        request.body = None
+        signing_secret = "test-secret"
+
+        # Old signature with old timestamp should be invalid
+        old_signature = "v0:" + hashlib.sha256((old_timestamp + "v0:" + signing_secret).encode()).hexdigest()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_signature_middleware(request, MagicMock())
+            assert exc_info.value.status_code == 401

@@ -6,10 +6,23 @@ readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [
   "alembic>=1.13.2",
+  "fastapi>=0.115.0",
   "python-dotenv>=1.0.1",
+  "python-multipart>=0.0.9",
   "pytest>=8.2.0",
   "requests>=2.32.5",
   "SQLAlchemy>=2.0.36",
+  "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-cov>=5.0.0",
+  "httpx>=0.27.0",
+  "ruff>=0.4.0",
+  "mypy>=1.10.0",
 ]
 
 [build-system]
@@ -19,4 +32,24 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 # Include the top-level script so editable builds succeed even without a package directory.
 include = ["main.py"]
-packages = ["db"]
+packages = ["db", "backend"]
+
+# Ruff configuration
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
