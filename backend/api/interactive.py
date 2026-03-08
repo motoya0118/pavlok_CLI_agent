@@ -406,6 +406,98 @@ def _build_commitment_summary_message(
     return text, blocks
 
 
+def _normalize_commitment_task(raw_task: str) -> str:
+    """Normalize commitment task name used as the active-row identity."""
+    return str(raw_task or "").strip()
+
+
+def _validate_duplicate_commitment_tasks(
+    rows: list[dict[str, str]],
+) -> dict[str, str]:
+    """Reject duplicate active task names in the same submit payload."""
+    task_to_indices: dict[str, list[int]] = {}
+    for row in rows:
+        task_to_indices.setdefault(row["task"], []).append(int(row["index"]))
+
+    errors: dict[str, str] = {}
+    for indices in task_to_indices.values():
+        if len(indices) < 2:
+            continue
+        for idx in indices:
+            errors[f"commitment_{idx}"] = "同じタスク名は登録できません。"
+    return errors
+
+
+def _load_active_commitments_for_update(session, user_id: str) -> dict[str, Commitment]:
+    """
+    Load active commitments keyed by normalized task.
+
+    Existing bad data is normalized in-place:
+    - task is trimmed
+    - blank active tasks are deactivated
+    - duplicate active tasks keep the latest row and deactivate the rest
+    """
+    rows = (
+        session.query(Commitment)
+        .filter(
+            Commitment.user_id == user_id,
+            Commitment.active.is_(True),
+        )
+        .order_by(Commitment.updated_at.desc(), Commitment.created_at.desc(), Commitment.id.desc())
+        .all()
+    )
+
+    active_by_task: dict[str, Commitment] = {}
+    for row in rows:
+        normalized_task = _normalize_commitment_task(row.task)
+        if row.task != normalized_task:
+            row.task = normalized_task
+
+        if not normalized_task:
+            row.active = False
+            continue
+
+        if normalized_task in active_by_task:
+            row.active = False
+            continue
+
+        active_by_task[normalized_task] = row
+
+    return active_by_task
+
+
+def _upsert_commitments_for_user(
+    session,
+    *,
+    user_id: str,
+    normalized_rows: list[dict[str, str]],
+) -> None:
+    """Persist /base_commit payload without deleting historical rows."""
+    active_by_task = _load_active_commitments_for_update(session, user_id)
+    submitted_tasks = {row["task"] for row in normalized_rows}
+
+    for row in normalized_rows:
+        existing = active_by_task.pop(row["task"], None)
+        if existing is None:
+            session.add(
+                Commitment(
+                    user_id=user_id,
+                    task=row["task"],
+                    time=row["time"],
+                    active=True,
+                )
+            )
+            continue
+
+        existing.task = row["task"]
+        existing.time = row["time"]
+        existing.active = True
+
+    for stale_row in active_by_task.values():
+        if stale_row.task not in submitted_tasks:
+            stale_row.active = False
+
+
 async def _notify_commitment_saved(
     channel_id: str,
     user_id: str,
@@ -769,6 +861,23 @@ def _current_commitments_from_view(view: dict[str, Any]) -> list[dict[str, str]]
         if isinstance(time_input, dict):
             selected_time = time_input.get("selected_time", "") or ""
 
+        if not task or not selected_time:
+            for block in blocks:
+                if not isinstance(block, dict):
+                    continue
+                if not task and block.get("block_id") == f"commitment_{idx}":
+                    element = block.get("element", {})
+                    if isinstance(element, dict):
+                        initial_value = element.get("initial_value", "")
+                        if isinstance(initial_value, str):
+                            task = initial_value
+                if not selected_time and block.get("block_id") == f"time_{idx}":
+                    element = block.get("element", {})
+                    if isinstance(element, dict):
+                        initial_time = element.get("initial_time", "")
+                        if isinstance(initial_time, str):
+                            selected_time = initial_time
+
         commitments.append({"task": task, "time": selected_time})
 
     return commitments
@@ -1043,6 +1152,7 @@ async def process_plan_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
     user_id = payload_data.get("user", {}).get("id", "")
     view = payload_data.get("view", {})
     state_values = view.get("state", {}).get("values", {})
+    view_blocks = view.get("blocks", [])
 
     if not user_id:
         return {
@@ -1050,13 +1160,16 @@ async def process_plan_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
             "errors": {"commitment_1": "ユーザー情報を取得できませんでした。"},
         }
 
-    commitments = _extract_commitments_from_submission(state_values)
+    commitments = _extract_commitments_from_submission(
+        state_values,
+        view_blocks=view_blocks if isinstance(view_blocks, list) else None,
+    )
     validation_errors: dict[str, str] = {}
     normalized_rows: list[dict[str, str]] = []
 
     for row in commitments:
         idx = row["index"]
-        task = row["task"].strip()
+        task = _normalize_commitment_task(row["task"])
         selected_time = _normalize_time(row["time"])
 
         if not task and not selected_time:
@@ -1070,11 +1183,13 @@ async def process_plan_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
 
         normalized_rows.append(
             {
+                "index": idx,
                 "task": task,
                 "time": selected_time,
             }
         )
 
+    validation_errors.update(_validate_duplicate_commitment_tasks(normalized_rows))
     if validation_errors:
         return {
             "response_action": "errors",
@@ -1083,18 +1198,11 @@ async def process_plan_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
 
     session = _get_session()
     try:
-        session.query(Commitment).filter(Commitment.user_id == user_id).delete(
-            synchronize_session=False
+        _upsert_commitments_for_user(
+            session,
+            user_id=user_id,
+            normalized_rows=normalized_rows,
         )
-        for row in normalized_rows:
-            session.add(
-                Commitment(
-                    user_id=user_id,
-                    task=row["task"],
-                    time=row["time"],
-                    active=True,
-                )
-            )
         session.commit()
     except Exception as exc:
         session.rollback()
@@ -1119,7 +1227,7 @@ async def process_plan_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
         _notify_commitment_saved(
             channel_id=channel_id,
             user_id=user_id,
-            commitments=normalized_rows,
+            commitments=[{"task": row["task"], "time": row["time"]} for row in normalized_rows],
             response_url=response_url,
         )
     )
@@ -1716,7 +1824,10 @@ async def process_calorie_submit(payload_data: dict[str, Any]) -> dict[str, Any]
     return {"response_action": "clear"}
 
 
-def _extract_commitments_from_submission(state_values: dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_commitments_from_submission(
+    state_values: dict[str, Any],
+    view_blocks: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """
     Extract commitment rows from Slack view_submission state.
     Supports:
@@ -1730,6 +1841,17 @@ def _extract_commitments_from_submission(state_values: dict[str, Any]) -> list[d
                 suffix = block_id[len(prefix) :]
                 if suffix.isdigit():
                     indices.add(int(suffix))
+
+    if not indices and view_blocks:
+        for block in view_blocks:
+            if not isinstance(block, dict):
+                continue
+            block_id = str(block.get("block_id", ""))
+            for prefix in ("commitment_", "time_"):
+                if block_id.startswith(prefix):
+                    suffix = block_id[len(prefix) :]
+                    if suffix.isdigit():
+                        indices.add(int(suffix))
 
     if not indices:
         return []
@@ -1755,6 +1877,23 @@ def _extract_commitments_from_submission(state_values: dict[str, Any]) -> list[d
                 task = legacy_task_block.get("task", "") or ""
             if not selected_time:
                 selected_time = legacy_task_block.get("time", "") or ""
+
+        if (not task or not selected_time) and view_blocks:
+            for block in view_blocks:
+                if not isinstance(block, dict):
+                    continue
+                if not task and block.get("block_id") == f"commitment_{idx}":
+                    element = block.get("element", {})
+                    if isinstance(element, dict):
+                        initial_value = element.get("initial_value", "")
+                        if isinstance(initial_value, str):
+                            task = initial_value
+                if not selected_time and block.get("block_id") == f"time_{idx}":
+                    element = block.get("element", {})
+                    if isinstance(element, dict):
+                        initial_time = element.get("initial_time", "")
+                        if isinstance(initial_time, str):
+                            selected_time = initial_time
 
         rows.append(
             {
