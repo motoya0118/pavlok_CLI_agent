@@ -1196,6 +1196,21 @@ async def process_plan_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
             "errors": validation_errors,
         }
 
+    if not normalized_rows:
+        print(
+            f"[{datetime.now()}] process_plan_submit rejected empty submission: "
+            f"user_id={user_id} callback_id={view.get('callback_id', '')} "
+            f"state_blocks={list(state_values.keys()) if isinstance(state_values, dict) else []}"
+        )
+        return {
+            "response_action": "errors",
+            "errors": {
+                "commitment_1": (
+                    "入力を解釈できませんでした。コミットメントを1件以上入力してから再送信してください。"
+                )
+            },
+        }
+
     session = _get_session()
     try:
         _upsert_commitments_for_user(

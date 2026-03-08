@@ -155,6 +155,62 @@ class TestInteractiveApi:
         session.close()
 
     @pytest.mark.asyncio
+    async def test_base_commit_submit_rejects_malformed_empty_submission_without_deactivating(
+        self, monkeypatch, tmp_path
+    ):
+        db_path = tmp_path / "base_commit_malformed_submit.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
+        session_factory = sessionmaker(bind=engine)
+
+        user_id = "U03JBULT484"
+        session = session_factory()
+        session.add_all(
+            [
+                Commitment(user_id=user_id, task="朝の瞑想", time="07:00:00", active=True),
+                Commitment(user_id=user_id, task="振り返り", time="22:00:00", active=True),
+            ]
+        )
+        session.commit()
+        session.close()
+
+        payload_data = {
+            "type": "view_submission",
+            "user": {"id": user_id},
+            "view": {
+                "callback_id": "commitment_submit",
+                "state": {
+                    "values": {
+                        "task_1": {"type": "plain_text_input", "value": "壊れた payload"},
+                    }
+                },
+            },
+        }
+
+        result = await process_plan_submit(payload_data)
+        assert result["response_action"] == "errors"
+        assert "commitment_1" in result["errors"]
+
+        session = session_factory()
+        rows = (
+            session.query(Commitment)
+            .filter(Commitment.user_id == user_id)
+            .order_by(Commitment.time.asc())
+            .all()
+        )
+        assert len(rows) == 2
+        assert all(row.active is True for row in rows)
+        session.close()
+
+    @pytest.mark.asyncio
     async def test_base_commit_submit_updates_time_without_replacing_commitment_id(
         self, monkeypatch, tmp_path
     ):

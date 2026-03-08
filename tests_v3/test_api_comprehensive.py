@@ -6,12 +6,12 @@ Tests follow v0.3 design document flow.
 
 import hashlib
 import hmac
-import subprocess
-import sys
 import time
 
 import pytest
 import requests
+
+from tests_v3.api_server import run_api_server
 
 # ============================================================================
 # Test Server Management
@@ -21,46 +21,8 @@ import requests
 @pytest.fixture(scope="module")
 def api_server():
     """Start and stop FastAPI server for testing."""
-    import os
-
-    # Set environment variable for subprocess
-    os.environ["SLACK_SIGNING_SECRET"] = "test_secret"
-
-    # Kill any existing server
-    subprocess.run(["pkill", "-f", "uvicorn"], stderr=subprocess.DEVNULL)
-
-    # Start server
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "backend.main:app",
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "8000",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    # Wait for server to start
-    for _ in range(30):
-        try:
-            response = requests.get("http://localhost:8000/health", timeout=1)
-            if response.status_code == 200:
-                break
-        except requests.exceptions.RequestException:
-            time.sleep(0.5)
-    else:
-        pytest.fail("Server failed to start within 15 seconds")
-
-    yield "http://localhost:8000"
-
-    # Stop server
-    process.terminate()
-    process.wait(timeout=5)
+    with run_api_server() as base_url:
+        yield base_url
 
 
 # ============================================================================
