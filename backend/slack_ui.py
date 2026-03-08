@@ -565,6 +565,71 @@ def _ignore_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
     ]
 
 
+def _report_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
+    """Generate report delivery configuration section."""
+    weekday_options = [
+        {"text": {"type": "plain_text", "text": "日曜日"}, "value": "sun"},
+        {"text": {"type": "plain_text", "text": "月曜日"}, "value": "mon"},
+        {"text": {"type": "plain_text", "text": "火曜日"}, "value": "tue"},
+        {"text": {"type": "plain_text", "text": "水曜日"}, "value": "wed"},
+        {"text": {"type": "plain_text", "text": "木曜日"}, "value": "thu"},
+        {"text": {"type": "plain_text", "text": "金曜日"}, "value": "fri"},
+        {"text": {"type": "plain_text", "text": "土曜日"}, "value": "sat"},
+    ]
+    selected_weekday = str(config_values.get("REPORT_WEEKDAY", "sat")).strip().lower()
+    weekday_initial_option = next(
+        (option for option in weekday_options if option["value"] == selected_weekday),
+        weekday_options[-1],
+    )
+
+    raw_time = str(config_values.get("REPORT_TIME", "07:00")).strip()
+    initial_time = "07:00"
+    if len(raw_time) >= 5 and ":" in raw_time:
+        hh, mm = raw_time[:5].split(":", 1)
+        if hh.isdigit() and mm.isdigit() and 0 <= int(hh) <= 23 and 0 <= int(mm) <= 59:
+            initial_time = f"{hh.zfill(2)}:{mm.zfill(2)}"
+
+    return [
+        {
+            "type": "divider",
+        },
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "📊 レポート設定",
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "REPORT_WEEKDAY",
+            "label": {
+                "type": "plain_text",
+                "text": "レポート曜日",
+            },
+            "element": {
+                "type": "static_select",
+                "action_id": "REPORT_WEEKDAY_select",
+                "initial_option": weekday_initial_option,
+                "options": weekday_options,
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "REPORT_TIME",
+            "label": {
+                "type": "plain_text",
+                "text": "レポート時刻",
+            },
+            "element": {
+                "type": "timepicker",
+                "action_id": "REPORT_TIME_time",
+                "initial_time": initial_time,
+            },
+        },
+    ]
+
+
 def _coach_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
     """Generate coach character configuration section."""
     return [
@@ -612,6 +677,7 @@ def config_modal(config_values: dict[str, str]) -> dict[str, Any]:
     blocks = []
     blocks.extend(_punishment_section(config_values))
     blocks.extend(_ignore_section(config_values))
+    blocks.extend(_report_section(config_values))
     blocks.extend(_coach_section(config_values))
 
     # Add action buttons
@@ -897,6 +963,7 @@ def _plan_task_blocks(index: int, commitment: dict[str, Any]) -> list[dict[str, 
 def plan_input_modal(
     commitments: list[dict[str, Any]],
     next_plan: dict[str, Any] | None = None,
+    report_input: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate plan input modal"""
     blocks = []
@@ -973,6 +1040,71 @@ def plan_input_modal(
         ]
     )
 
+    report_data = report_input or {}
+    report_show = bool(report_data.get("show", False))
+    if report_show:
+        report_date_value = str(report_data.get("date", "today"))
+        if report_date_value not in {"today", "tomorrow"}:
+            report_date_value = "today"
+
+        report_time = str(report_data.get("time", "07:00"))
+        if len(report_time) >= 5:
+            report_time = report_time[:5]
+        else:
+            report_time = "07:00"
+
+        report_date_options = [
+            {"text": {"type": "plain_text", "text": "今日"}, "value": "today"},
+            {"text": {"type": "plain_text", "text": "明日"}, "value": "tomorrow"},
+        ]
+        report_initial_option = report_date_options[0]
+        for option in report_date_options:
+            if option["value"] == report_date_value:
+                report_initial_option = option
+                break
+
+        blocks.extend(
+            [
+                {
+                    "type": "divider",
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*📊 レポート入力 (event.report)*",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "report_date",
+                    "label": {
+                        "type": "plain_text",
+                        "text": "実行日",
+                    },
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "date",
+                        "initial_option": report_initial_option,
+                        "options": report_date_options,
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "report_time",
+                    "label": {
+                        "type": "plain_text",
+                        "text": "実行時間",
+                    },
+                    "element": {
+                        "type": "timepicker",
+                        "action_id": "time",
+                        "initial_time": report_time,
+                    },
+                },
+            ]
+        )
+
     return {
         "type": "modal",
         "callback_id": "plan_submit",
@@ -991,6 +1123,7 @@ def plan_input_modal(
 def plan_complete_notification(
     scheduled_tasks: list[dict[str, Any]],
     next_plan: dict[str, str],
+    report_plan: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Generate plan complete notification blocks"""
     task_lines = []
@@ -1021,6 +1154,23 @@ def plan_complete_notification(
                 "text": f"*🔁 次回計画: {next_plan.get('date', '明日')} {next_plan.get('time', '')}*",
             },
         },
+    ]
+
+    if report_plan:
+        report_date = str(report_plan.get("date", "今日")).strip() or "今日"
+        report_time = str(report_plan.get("time", "")).strip()
+        report_time_suffix = f" {report_time}" if report_time else ""
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*📊 レポート予定: {report_date}{report_time_suffix}*",
+                },
+            }
+        )
+
+    blocks.append(
         {
             "type": "context",
             "elements": [
@@ -1029,10 +1179,63 @@ def plan_complete_notification(
                     "text": "💡 各時刻にリマインドされます",
                 },
             ],
-        },
-    ]
+        }
+    )
 
     return blocks
+
+
+# ============================================================================
+# Calorie Modal (/cal)
+# ============================================================================
+
+
+def calorie_input_modal() -> dict[str, Any]:
+    """Generate /cal image upload modal."""
+    return {
+        "type": "modal",
+        "callback_id": "calorie_submit",
+        "title": {
+            "type": "plain_text",
+            "text": "🍽️ カロリー計算",
+        },
+        "submit": {
+            "type": "plain_text",
+            "text": "解析開始",
+        },
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "食事画像を1枚アップロードしてください。",
+                },
+            },
+            {
+                "type": "input",
+                "block_id": "calorie_image",
+                "label": {
+                    "type": "plain_text",
+                    "text": "食事画像",
+                },
+                "element": {
+                    "type": "file_input",
+                    "action_id": "image",
+                    "max_files": 1,
+                    "filetypes": ["jpg", "jpeg", "png", "webp", "heic"],
+                },
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "⚠️ 10MB以下の画像のみ対応します。",
+                    }
+                ],
+            },
+        ],
+    }
 
 
 # ============================================================================
@@ -1150,6 +1353,113 @@ def remind_no_response(
                     "text": "⚡ Pavlokから刺激を送信しました",
                 },
             ],
+        },
+    ]
+
+
+# ============================================================================
+# Report Event UI
+# ============================================================================
+
+
+def report_post(
+    schedule_id: str,
+    report_type: str,
+    period_start: str,
+    period_end: str,
+    summary_text: str,
+    commitment_stats: list[dict[str, Any]],
+    llm_comment: str,
+) -> list[dict[str, Any]]:
+    """Generate report post blocks in card-style sections."""
+    report_label = "月次レポート" if str(report_type).lower() == "monthly" else "週次レポート"
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*{report_label}*\n期間: `{period_start} ~ {period_end}`",
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*集計サマリー*\n{summary_text}",
+            },
+        },
+    ]
+
+    for row in commitment_stats:
+        task = str(row.get("task", "不明")).strip() or "不明"
+        success = int(row.get("success_count", 0))
+        failure = int(row.get("failure_count", 0))
+        success_rate = float(row.get("success_rate", 0.0))
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"• *{task}* ｜ "
+                        f"成功 *{success}* ｜ "
+                        f"失敗 *{failure}* ｜ "
+                        f"成功率 *{success_rate:.1f}%*"
+                    ),
+                },
+            }
+        )
+    blocks.append(
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "*コーチコメント*",
+            },
+        }
+    )
+    blocks.extend(
+        [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": llm_comment,
+                },
+            },
+            {
+                "type": "actions",
+                "block_id": "report_response",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "読みました",
+                        },
+                        "style": "primary",
+                        "action_id": "report_read",
+                        "value": f'{{"schedule_id": "{schedule_id}", "event_type": "report"}}',
+                    },
+                ],
+            },
+        ]
+    )
+    return blocks
+
+
+def report_read_response(report_type: str) -> list[dict[str, Any]]:
+    """Generate report read response blocks."""
+    next_message = (
+        "来月も頑張りましょう" if str(report_type).lower() == "monthly" else "来週も頑張りましょう"
+    )
+    return [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"✅ レポートを確認しました\n{next_message}",
+            },
         },
     ]
 

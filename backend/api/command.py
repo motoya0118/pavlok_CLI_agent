@@ -3,14 +3,16 @@
 import asyncio
 import json
 import os
+import re
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
 import requests
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from backend.api.report_ui import build_report_plan_input_context
 from backend.models import (
     ChangeSource,
     Commitment,
@@ -76,6 +78,15 @@ CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
         "min": 1,
         "max": 20,
     },
+    "REPORT_WEEKDAY": {
+        "default": "sat",
+        "value_type": ConfigValueType.STR,
+        "allowed": {"sun", "mon", "tue", "wed", "thu", "fri", "sat"},
+    },
+    "REPORT_TIME": {
+        "default": "07:00",
+        "value_type": ConfigValueType.STR,
+    },
     "COACH_CHARACTOR": {
         "default": DEFAULT_COACH_CHARACTOR,
         "value_type": ConfigValueType.STR,
@@ -104,6 +115,29 @@ def _get_session():
         _SESSION_DB_URL = database_url
 
     return _SESSION_FACTORY()
+
+
+def _normalize_legacy_config_value_types(session, now: datetime | None = None) -> int:
+    """
+    Normalize legacy lowercase enum literals in configurations.value_type.
+
+    Early migrations inserted lowercase values (e.g. "str"), while current model
+    expects enum names (e.g. "STR"). This keeps existing DBs readable/writable.
+    """
+    normalized_at = now or datetime.now()
+    result = session.execute(
+        text(
+            """
+            UPDATE configurations
+            SET value_type = upper(value_type),
+                updated_at = :now
+            WHERE lower(value_type) IN ('int', 'float', 'str', 'json', 'bool')
+              AND value_type != upper(value_type)
+            """
+        ),
+        {"now": normalized_at},
+    )
+    return int(result.rowcount or 0)
 
 
 def _load_existing_commitments(user_id: str) -> list[dict[str, str]]:
@@ -141,14 +175,17 @@ def _to_relative_day_value(run_at: datetime) -> str:
     return "tomorrow"
 
 
-def _load_pending_plan_prefill(user_id: str) -> tuple[list[dict[str, str]], dict[str, str]]:
+def _load_pending_plan_prefill(
+    user_id: str,
+) -> tuple[list[dict[str, str]], dict[str, str], dict[str, Any]]:
     """
     Load /plan modal prefill from schedules where state is pending.
-    Returns (remind_rows, next_plan).
+    Returns (remind_rows, next_plan, report_input).
     """
     default_next_plan = {"date": "tomorrow", "time": "07:00"}
+    default_report_input = {"show": False, "date": "today", "time": "07:00"}
     if not user_id:
-        return [], default_next_plan
+        return [], default_next_plan, default_report_input
 
     session = _get_session()
     try:
@@ -214,10 +251,11 @@ def _load_pending_plan_prefill(user_id: str) -> tuple[list[dict[str, str]], dict
         if len(remind_rows) > MAX_COMMITMENT_ROWS:
             remind_rows = remind_rows[:MAX_COMMITMENT_ROWS]
 
-        return remind_rows, next_plan
+        report_input = build_report_plan_input_context(session, user_id)
+        return remind_rows, next_plan, report_input
     except Exception as exc:
         print(f"[{datetime.now()}] failed to load pending schedules for /plan modal: {exc}")
-        return [], default_next_plan
+        return [], default_next_plan, default_report_input
     finally:
         session.close()
 
@@ -283,6 +321,10 @@ def _load_user_config_values(user_id: str) -> dict[str, str]:
 
     session = _get_session()
     try:
+        normalized = _normalize_legacy_config_value_types(session)
+        if normalized > 0:
+            session.commit()
+
         rows = (
             session.query(Configuration)
             .filter(
@@ -318,6 +360,8 @@ def _extract_config_updates_from_view(
             selected = payload.get("selected_option", {})
             if isinstance(selected, dict):
                 raw_value = str(selected.get("value", "") or "")
+        elif "selected_time" in payload:
+            raw_value = str(payload.get("selected_time", "") or "").strip()
         elif "value" in payload:
             raw_value = str(payload.get("value", "") or "").strip()
 
@@ -344,6 +388,11 @@ def _extract_config_updates_from_view(
                 errors[key] = f"{max_value}以下で入力してください。"
                 continue
 
+        if key == "REPORT_TIME":
+            if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", raw_value):
+                errors[key] = "HH:MM形式で入力してください。"
+                continue
+
         if key == "COACH_CHARACTOR" and len(raw_value) > 100:
             errors[key] = "100文字以内で入力してください。"
             continue
@@ -362,6 +411,8 @@ def _save_user_configs(user_id: str, updates: dict[str, str]) -> int:
     changed_count = 0
     session = _get_session()
     try:
+        _normalize_legacy_config_value_types(session, now=now)
+
         for key, new_value in updates.items():
             definition = CONFIG_DEFINITIONS.get(key)
             if not definition:
@@ -596,10 +647,15 @@ async def process_plan(request) -> dict[str, Any]:
 
     plan_rows: list[dict[str, str]] = []
     next_plan_prefill: dict[str, str] = {"date": "tomorrow", "time": "07:00"}
+    report_input_prefill: dict[str, Any] = {"show": False, "date": "today", "time": "07:00"}
     if user_id:
-        plan_rows, next_plan_prefill = _load_pending_plan_prefill(user_id)
+        plan_rows, next_plan_prefill, report_input_prefill = _load_pending_plan_prefill(user_id)
 
-    modal_data = plan_input_modal(plan_rows, next_plan=next_plan_prefill)
+    modal_data = plan_input_modal(
+        plan_rows,
+        next_plan=next_plan_prefill,
+        report_input=report_input_prefill,
+    )
     private_metadata: dict[str, Any] = {}
     if channel_id:
         private_metadata["channel_id"] = channel_id
@@ -654,6 +710,91 @@ async def process_plan(request) -> dict[str, Any]:
         }
 
     print(f"[{datetime.now()}] plan views.open skipped: missing trigger_id")
+    return {
+        "status": "success",
+        "response_type": "ephemeral",
+        "text": "trigger_id が取得できないためモーダルを開けませんでした。再実行してください。",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ":warning: trigger_id が取得できないためモーダルを開けませんでした。再実行してください。",
+                },
+            }
+        ],
+    }
+
+
+async def process_cal(request) -> dict[str, Any]:
+    """
+    カロリー計算コマンド処理。
+    trigger_id があれば画像アップロードモーダルを開く。
+    """
+    from backend.slack_ui import calorie_input_modal
+
+    request_map = request if isinstance(request, Mapping) else {}
+    user_id = request_map.get("user_id", "")
+    channel_id = request_map.get("channel_id", "")
+    response_url = request_map.get("response_url", "")
+    trigger_id = request_map.get("trigger_id", "")
+
+    if not isinstance(user_id, str):
+        user_id = ""
+    if not isinstance(channel_id, str):
+        channel_id = ""
+    if not isinstance(response_url, str):
+        response_url = ""
+    if not isinstance(trigger_id, str):
+        trigger_id = ""
+
+    modal_data = calorie_input_modal()
+    private_metadata: dict[str, str] = {}
+    if channel_id:
+        private_metadata["channel_id"] = channel_id
+    if user_id:
+        private_metadata["user_id"] = user_id
+    if response_url:
+        private_metadata["response_url"] = response_url
+    if private_metadata:
+        modal_data["private_metadata"] = json.dumps(private_metadata, ensure_ascii=False)
+
+    if trigger_id:
+        ok, reason = await asyncio.to_thread(_open_slack_modal, trigger_id, modal_data)
+        if ok:
+            print(f"[{datetime.now()}] cal views.open succeeded")
+            return {
+                "status": "success",
+                "response_type": "ephemeral",
+                "text": "カロリー計算モーダルを開きました。",
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "🍽️ カロリー計算モーダルを開きました。",
+                        },
+                    }
+                ],
+            }
+
+        return {
+            "status": "success",
+            "response_type": "ephemeral",
+            "text": f"モーダルを開けませんでした: {reason}",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f":warning: モーダルを開けませんでした: {reason}",
+                    },
+                }
+            ],
+        }
+
+    print(f"[{datetime.now()}] cal views.open skipped: missing trigger_id")
+
     return {
         "status": "success",
         "response_type": "ephemeral",

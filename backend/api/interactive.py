@@ -5,29 +5,37 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 from datetime import datetime, timedelta
 from datetime import time as dt_time
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from backend.api.report_ui import build_report_plan_input_context
+from backend.calorie_agent import CalorieAgentError, CalorieImageParseError, analyze_calorie
 from backend.models import (
     ActionLog,
     ActionResult,
+    CalorieRecord,
     Commitment,
     Configuration,
     EventType,
     Punishment,
     PunishmentMode,
+    ReportDelivery,
     Schedule,
     ScheduleState,
 )
 
 MAX_COMMITMENT_ROWS = 10
 MIN_COMMITMENT_ROWS = 3
+CALORIE_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+JST = ZoneInfo("Asia/Tokyo")
 
 _SESSION_FACTORY = None
 _SESSION_DB_URL = None
@@ -78,6 +86,236 @@ def _extract_submission_metadata(payload_data: dict[str, Any]) -> dict[str, str]
         metadata.setdefault("user_id", user_id)
 
     return metadata
+
+
+def _extract_calorie_file_id_from_state(state_values: dict[str, Any]) -> str:
+    """Extract first file_id from Slack file_input state values."""
+
+    def _pick_file_id(value: Any) -> str:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, str) and item.strip():
+                    return item.strip()
+                if isinstance(item, dict):
+                    for key in ("id", "file_id"):
+                        raw = item.get(key)
+                        if isinstance(raw, str) and raw.strip():
+                            return raw.strip()
+        return ""
+
+    if not isinstance(state_values, dict):
+        return ""
+
+    for block in state_values.values():
+        if not isinstance(block, dict):
+            continue
+        for action in block.values():
+            if not isinstance(action, dict):
+                continue
+
+            # Slack payload variants observed across clients/APIs.
+            for key in ("files", "selected_files", "file_ids"):
+                file_id = _pick_file_id(action.get(key))
+                if file_id:
+                    return file_id
+            for key in ("file_id", "selected_file"):
+                file_id = _pick_file_id(action.get(key))
+                if file_id:
+                    return file_id
+    return ""
+
+
+def _fetch_slack_file_info(file_id: str, bot_token: str) -> dict[str, Any]:
+    """Fetch Slack file metadata by file id."""
+    response = requests.get(
+        "https://slack.com/api/files.info",
+        headers={"Authorization": f"Bearer {bot_token}"},
+        params={"file": file_id},
+        timeout=5,
+    )
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise CalorieAgentError(
+            f"files.info returned non-JSON response: {response.status_code}"
+        ) from exc
+
+    if not body.get("ok"):
+        error = str(body.get("error") or "unknown_error")
+        needed = str(body.get("needed") or "").strip()
+        provided = str(body.get("provided") or "").strip()
+        details = [
+            f"error={error}",
+            f"status={response.status_code}",
+            f"file_id={file_id}",
+        ]
+        if needed:
+            details.append(f"needed={needed}")
+        if provided:
+            details.append(f"provided={provided}")
+        if error == "missing_scope":
+            details.append("hint=add required bot scope and reinstall Slack app")
+            if "files:read" in needed:
+                details.append("suggested_scope=files:read")
+        raise CalorieAgentError("files.info failed: " + " ".join(details))
+    file_data = body.get("file", {})
+    if not isinstance(file_data, dict):
+        raise CalorieAgentError("files.info returned invalid file payload")
+    return file_data
+
+
+def _download_slack_file_bytes(download_url: str, bot_token: str) -> bytes:
+    """Download private file bytes from Slack."""
+    response = requests.get(
+        download_url,
+        headers={"Authorization": f"Bearer {bot_token}"},
+        timeout=20,
+    )
+    if response.status_code >= 400:
+        raise CalorieAgentError(f"file download failed: status={response.status_code}")
+    return response.content
+
+
+def _normalize_calorie_items(payload: dict[str, Any]) -> list[dict[str, int | str]]:
+    """Normalize parsed calorie payload into DB-ready rows."""
+    items = payload.get("items", [])
+    if not isinstance(items, list) or not items:
+        raise CalorieImageParseError("items was empty")
+
+    normalized: list[dict[str, int | str]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        food_raw = item.get("food_name")
+        food_name = food_raw.strip() if isinstance(food_raw, str) else ""
+        if not food_name:
+            food_name = "不明"
+
+        calorie_raw = item.get("calorie")
+        try:
+            calorie = int(calorie_raw)
+        except (TypeError, ValueError) as exc:
+            raise CalorieImageParseError("calorie value was invalid") from exc
+
+        if calorie < 0:
+            raise CalorieImageParseError("calorie must be non-negative")
+
+        normalized.append({"food_name": food_name, "calorie": calorie})
+
+    if not normalized:
+        raise CalorieImageParseError("normalized items was empty")
+    return normalized
+
+
+def _build_calorie_result_blocks(
+    items: list[dict[str, int | str]],
+    uploaded_at_jst: datetime,
+) -> list[dict[str, Any]]:
+    """Build success notification blocks for calorie analysis."""
+    lines = [f"- {str(row['food_name'])}: {int(row['calorie'])} kcal" for row in items]
+    total = sum(int(row["calorie"]) for row in items)
+
+    return [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "✅ *カロリー解析が完了しました*",
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "\n".join(lines),
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"合計: *{total} kcal* / "
+                        f"アップロード時刻(JST): {uploaded_at_jst.strftime('%Y-%m-%d %H:%M:%S')}"
+                    ),
+                }
+            ],
+        },
+    ]
+
+
+async def _notify_calorie_result(
+    channel_id: str,
+    user_id: str,
+    message: str,
+    blocks: list[dict[str, Any]] | None = None,
+) -> None:
+    """Post calorie result notification into command channel."""
+    bot_token = os.getenv("SLACK_BOT_USER_OAUTH_TOKEN")
+    if not bot_token:
+        print(
+            f"[{datetime.now()}] skip calorie notification: "
+            "SLACK_BOT_USER_OAUTH_TOKEN is not configured"
+        )
+        return
+    if not channel_id:
+        print(f"[{datetime.now()}] skip calorie notification: missing channel_id")
+        return
+
+    mention_text = f"<@{user_id}>" if user_id else ""
+    payload_blocks: list[dict[str, Any]] = []
+    if mention_text:
+        payload_blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": mention_text},
+            }
+        )
+    payload_blocks.append(
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": message},
+        }
+    )
+    if blocks:
+        payload_blocks.extend(blocks)
+
+    def _post() -> tuple[bool, str]:
+        try:
+            response = requests.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={
+                    "Authorization": f"Bearer {bot_token}",
+                    "Content-Type": "application/json; charset=utf-8",
+                },
+                json={
+                    "channel": channel_id,
+                    "text": message,
+                    "blocks": payload_blocks,
+                    "unfurl_links": False,
+                    "unfurl_media": False,
+                },
+                timeout=5,
+            )
+            body = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            return False, f"chat.postMessage failed: {exc}"
+
+        if not body.get("ok"):
+            return False, f"chat.postMessage error: {body.get('error')}"
+        return True, "ok"
+
+    ok, detail = await asyncio.to_thread(_post)
+    if ok:
+        print(
+            f"[{datetime.now()}] calorie notification sent: user_id={user_id} channel={channel_id}"
+        )
+    else:
+        print(f"[{datetime.now()}] calorie notification failed: {detail}")
 
 
 def _extract_plan_row_map_from_metadata(payload_data: dict[str, Any]) -> dict[int, dict[str, str]]:
@@ -283,11 +521,21 @@ def _to_relative_day_label(date_value: str) -> str:
     return "今日"
 
 
+def _to_day_label_from_datetime(run_at: datetime, now: datetime) -> str:
+    """Convert absolute datetime to display day label."""
+    if run_at.date() == now.date():
+        return "今日"
+    if run_at.date() == (now.date() + timedelta(days=1)):
+        return "明日"
+    return run_at.strftime("%Y-%m-%d")
+
+
 async def _notify_plan_saved(
     channel_id: str,
     user_id: str,
     scheduled_tasks: list[dict[str, str]],
     next_plan: dict[str, str],
+    report_plan: dict[str, str] | None = None,
     thread_ts: str = "",
 ) -> None:
     """Post plan submit completion message to Slack."""
@@ -314,7 +562,11 @@ async def _notify_plan_saved(
                 "text": text,
             },
         },
-        *plan_complete_notification(visible_tasks, next_plan),
+        *plan_complete_notification(
+            visible_tasks,
+            next_plan,
+            report_plan=report_plan,
+        ),
     ]
     headers = {
         "Authorization": f"Bearer {bot_token}",
@@ -671,7 +923,14 @@ async def process_plan_open_modal(payload_data: dict[str, Any]) -> dict[str, Any
         return {"status": "success"}
 
     commitments = _load_active_commitments_for_user(user_id)
-    modal_view = plan_input_modal(commitments)
+    report_input_context = {"show": False, "date": "today", "time": "07:00"}
+    session = _get_session()
+    try:
+        report_input_context = build_report_plan_input_context(session, user_id)
+    finally:
+        session.close()
+
+    modal_view = plan_input_modal(commitments, report_input=report_input_context)
     metadata = {
         "user_id": user_id,
         "channel_id": channel_id,
@@ -955,6 +1214,7 @@ def _parse_plan_submission_state(
 ) -> tuple[
     list[dict[str, Any]],
     dict[str, str],
+    dict[str, str] | None,
     dict[str, str],
 ]:
     """
@@ -962,6 +1222,7 @@ def _parse_plan_submission_state(
     Returns:
     - task rows [{index, date, time, skip}]
     - next_plan {date, time}
+    - report_input {date, time} | None
     - validation errors keyed by block_id
     """
     errors: dict[str, str] = {}
@@ -1001,7 +1262,20 @@ def _parse_plan_submission_state(
     if not next_plan_time:
         errors["next_plan_time"] = "次回計画の実行時間を選択してください。"
 
-    return task_rows, {"date": next_plan_date, "time": next_plan_time}, errors
+    report_input: dict[str, str] | None = None
+    has_report_input = "report_date" in state_values or "report_time" in state_values
+    if has_report_input:
+        report_date = _extract_static_select_value(state_values, "report_date", "date")
+        report_time = _normalize_time(
+            _extract_timepicker_value(state_values, "report_time", "time")
+        )
+        if report_date not in {"today", "tomorrow"}:
+            errors["report_date"] = "レポートの実行日を選択してください。"
+        if not report_time:
+            errors["report_time"] = "レポートの実行時間を選択してください。"
+        report_input = {"date": report_date, "time": report_time}
+
+    return task_rows, {"date": next_plan_date, "time": next_plan_time}, report_input, errors
 
 
 async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
@@ -1021,7 +1295,9 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
             "errors": {"next_plan_date": "ユーザー情報を取得できませんでした。"},
         }
 
-    task_rows, next_plan, validation_errors = _parse_plan_submission_state(state_values)
+    task_rows, next_plan, report_input, validation_errors = _parse_plan_submission_state(
+        state_values
+    )
     if validation_errors:
         return {
             "response_action": "errors",
@@ -1091,6 +1367,7 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
         "date": _to_relative_day_label(next_plan["date"]),
         "time": next_plan["time"][:5],
     }
+    report_for_message: dict[str, str] | None = None
     now = datetime.now()
     thread_ts = ""
     inflight_canceled = 0
@@ -1122,6 +1399,7 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
             .filter(
                 Schedule.user_id == user_id,
                 Schedule.state.in_([ScheduleState.PENDING, ScheduleState.PROCESSING]),
+                Schedule.event_type.in_([EventType.PLAN, EventType.REMIND]),
             )
             .update(
                 {
@@ -1169,6 +1447,75 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
             )
         )
 
+        if report_input is not None:
+            report_run_at = _resolve_relative_datetime(
+                report_input["date"],
+                report_input["time"],
+            )
+            report_ui_time = report_input["time"][:5]
+            report_schedule = (
+                session.query(Schedule)
+                .filter(
+                    Schedule.user_id == user_id,
+                    Schedule.event_type == EventType.REPORT,
+                    Schedule.state == ScheduleState.PENDING,
+                )
+                .order_by(Schedule.updated_at.desc(), Schedule.created_at.desc())
+                .first()
+            )
+            if report_schedule:
+                report_schedule.run_at = report_run_at
+                report_schedule.updated_at = now
+                report_schedule.set_report_input_value(
+                    ui_date=report_input["date"],
+                    ui_time=report_ui_time,
+                    updated_at=now,
+                )
+            else:
+                report_schedule = Schedule(
+                    user_id=user_id,
+                    event_type=EventType.REPORT,
+                    run_at=report_run_at,
+                    state=ScheduleState.PENDING,
+                    retry_count=0,
+                    comment="report",
+                )
+                report_schedule.set_report_input_value(
+                    ui_date=report_input["date"],
+                    ui_time=report_ui_time,
+                    updated_at=now,
+                )
+                session.add(report_schedule)
+
+            report_schedule_for_message = (
+                session.query(Schedule)
+                .filter(
+                    Schedule.user_id == user_id,
+                    Schedule.event_type == EventType.REPORT,
+                    Schedule.state == ScheduleState.PENDING,
+                )
+                .order_by(Schedule.updated_at.desc(), Schedule.created_at.desc())
+                .first()
+            )
+            if report_schedule_for_message is None:
+                report_schedule_for_message = (
+                    session.query(Schedule)
+                    .filter(
+                        Schedule.user_id == user_id,
+                        Schedule.event_type == EventType.REPORT,
+                        Schedule.state == ScheduleState.PROCESSING,
+                    )
+                    .order_by(Schedule.updated_at.desc(), Schedule.created_at.desc())
+                    .first()
+                )
+            if report_schedule_for_message and isinstance(
+                report_schedule_for_message.run_at, datetime
+            ):
+                report_for_message = {
+                    "date": _to_day_label_from_datetime(report_schedule_for_message.run_at, now),
+                    "time": report_schedule_for_message.run_at.strftime("%H:%M"),
+                }
+
         # Record explicit "skip" decisions in action_logs.
         if opened_plan_schedule_id:
             for _task_name in skipped_task_names:
@@ -1195,6 +1542,8 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
         f"inflight_canceled={inflight_canceled} "
         f"user_id={user_id} remind_count={len(remind_rows_to_save)} "
         f"next_plan={next_plan['date']} {next_plan['time']} "
+        f"report_input={'shown' if report_input is not None else 'hidden'} "
+        f"report_for_message={report_for_message or '-'} "
         f"db={_SESSION_DB_URL}"
     )
 
@@ -1205,6 +1554,7 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
             user_id=user_id,
             scheduled_tasks=scheduled_tasks_for_message,
             next_plan=next_plan_for_message,
+            report_plan=report_for_message,
             thread_ts=thread_ts,
         )
     )
@@ -1213,6 +1563,157 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
     return {
         "response_action": "clear",
     }
+
+
+async def _run_calorie_submit_job(
+    user_id: str,
+    channel_id: str,
+    file_id: str,
+    bot_token: str,
+) -> None:
+    """Run calorie submit processing in background after modal ACK."""
+    stage = "fetch_file_info"
+    try:
+        file_info = await asyncio.to_thread(_fetch_slack_file_info, file_id, bot_token)
+        stage = "validate_file_size"
+        file_size = int(file_info.get("size") or 0)
+        if file_size > CALORIE_MAX_IMAGE_BYTES:
+            await _notify_calorie_result(
+                channel_id=channel_id,
+                user_id=user_id,
+                message="画像サイズが大きすぎるので、10MB以下の画像サイズにしてリトライしてください",
+            )
+            return
+
+        download_url = str(
+            file_info.get("url_private_download") or file_info.get("url_private") or ""
+        ).strip()
+        if not download_url:
+            raise CalorieAgentError("Slack file has no download URL")
+
+        stage = "download_file"
+        image_bytes = await asyncio.to_thread(_download_slack_file_bytes, download_url, bot_token)
+        stage = "validate_downloaded_size"
+        if len(image_bytes) > CALORIE_MAX_IMAGE_BYTES:
+            await _notify_calorie_result(
+                channel_id=channel_id,
+                user_id=user_id,
+                message="画像サイズが大きすぎるので、10MB以下の画像サイズにしてリトライしてください",
+            )
+            return
+
+        mime_type = str(file_info.get("mimetype") or "image/jpeg")
+        stage = "analyze_calorie"
+        parsed_payload, raw_json, provider, model = await asyncio.to_thread(
+            analyze_calorie,
+            image_bytes,
+            mime_type,
+        )
+        stage = "normalize_items"
+        items = _normalize_calorie_items(parsed_payload)
+
+        uploaded_at_jst = datetime.now(JST).replace(tzinfo=None)
+        stage = "save_db"
+        session = _get_session()
+        try:
+            for row in items:
+                session.add(
+                    CalorieRecord(
+                        user_id=user_id,
+                        uploaded_at=uploaded_at_jst,
+                        food_name=str(row["food_name"]),
+                        calorie=int(row["calorie"]),
+                        llm_raw_response_json=raw_json,
+                        provider=provider,
+                        model=model,
+                    )
+                )
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+        stage = "notify_success"
+        await _notify_calorie_result(
+            channel_id=channel_id,
+            user_id=user_id,
+            message="カロリー解析結果を記録しました",
+            blocks=_build_calorie_result_blocks(items, uploaded_at_jst),
+        )
+    except CalorieImageParseError as exc:
+        error_text = str(exc)
+        if error_text == "items was empty":
+            user_message = "upload画像はカロリー算出不可です。"
+        else:
+            user_message = "画像解析に失敗しました"
+        print(
+            f"[{datetime.now()}] process_calorie_submit parse error: "
+            f"stage={stage} user_id={user_id} channel_id={channel_id} "
+            f"file_id={file_id} error={type(exc).__name__}: {exc}"
+        )
+        print(traceback.format_exc())
+        await _notify_calorie_result(
+            channel_id=channel_id,
+            user_id=user_id,
+            message=user_message,
+        )
+    except Exception as exc:
+        print(
+            f"[{datetime.now()}] process_calorie_submit error: "
+            f"stage={stage} user_id={user_id} channel_id={channel_id} "
+            f"file_id={file_id} error={type(exc).__name__}: {exc}"
+        )
+        print(traceback.format_exc())
+        await _notify_calorie_result(
+            channel_id=channel_id,
+            user_id=user_id,
+            message="失敗しました。もう一度お試しください",
+        )
+
+
+async def process_calorie_submit(payload_data: dict[str, Any]) -> dict[str, Any]:
+    """Handle /cal modal submit (callback_id=calorie_submit)."""
+    user_id = payload_data.get("user", {}).get("id", "")
+    view = payload_data.get("view", {})
+    state_values = view.get("state", {}).get("values", {})
+    metadata = _extract_submission_metadata(payload_data)
+    channel_id = metadata.get("channel_id", "")
+
+    file_id = _extract_calorie_file_id_from_state(state_values)
+    print(
+        f"[{datetime.now()}] process_calorie_submit start: "
+        f"user_id={user_id} channel_id={channel_id} "
+        f"state_blocks={list(state_values.keys())} file_id={file_id or '(none)'}"
+    )
+    if not file_id:
+        return {
+            "response_action": "errors",
+            "errors": {"calorie_image": "画像を1枚選択してください。"},
+        }
+
+    bot_token = os.getenv("SLACK_BOT_USER_OAUTH_TOKEN", "").strip()
+    if not bot_token:
+        asyncio.create_task(
+            _notify_calorie_result(
+                channel_id=channel_id,
+                user_id=user_id,
+                message="失敗しました。もう一度お試しください",
+            )
+        )
+        return {"response_action": "clear"}
+
+    # Slack modal submit requires ACK in ~3s; run heavy work asynchronously.
+    asyncio.create_task(
+        _run_calorie_submit_job(
+            user_id=user_id,
+            channel_id=channel_id,
+            file_id=file_id,
+            bot_token=bot_token,
+        )
+    )
+    return {"response_action": "clear"}
 
 
 def _extract_commitments_from_submission(state_values: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1751,6 +2252,246 @@ async def process_remind_response(
         )
 
     # Slack block_actions ack payload (valid message response).
+    return {
+        "status": "success",
+        "detail": detail,
+        "response_type": "ephemeral",
+        "replace_original": False,
+        "text": detail,
+    }
+
+
+async def _notify_report_read_result(
+    channel_id: str,
+    user_id: str,
+    thread_ts: str,
+    text: str,
+    blocks: list[dict[str, Any]],
+    reason_text: str = "",
+) -> None:
+    """Post report read result as a threaded Slack message."""
+    bot_token = os.getenv("SLACK_BOT_USER_OAUTH_TOKEN")
+    if not bot_token:
+        print(
+            f"[{datetime.now()}] skip report-read notification: "
+            "SLACK_BOT_USER_OAUTH_TOKEN is not configured"
+        )
+        return
+
+    headers = {
+        "Authorization": f"Bearer {bot_token}",
+        "Content-Type": "application/json; charset=utf-8",
+    }
+
+    def _post() -> tuple[bool, str]:
+        if not channel_id:
+            return False, "missing channel_id for threaded response"
+
+        payload_blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"<@{user_id}>",
+                },
+            },
+            *blocks,
+        ]
+
+        post_payload: dict[str, Any] = {
+            "channel": channel_id,
+            "text": text,
+            "blocks": payload_blocks,
+            "unfurl_links": False,
+            "unfurl_media": False,
+        }
+        if thread_ts:
+            post_payload["thread_ts"] = thread_ts
+            post_payload["reply_broadcast"] = False
+
+        try:
+            post_resp = requests.post(
+                "https://slack.com/api/chat.postMessage",
+                headers=headers,
+                json=post_payload,
+                timeout=2.5,
+            )
+            post_body = post_resp.json()
+        except (requests.RequestException, ValueError) as exc:
+            return False, f"chat.postMessage failed: {exc}"
+
+        if not post_body.get("ok"):
+            return False, f"chat.postMessage error: {post_body.get('error')}"
+        return True, "ok"
+
+    ok, post_detail = await asyncio.to_thread(_post)
+    if ok:
+        print(
+            f"[{datetime.now()}] report-read notification sent: "
+            f"user_id={user_id} channel={channel_id} thread_ts={thread_ts or '-'}"
+        )
+        await _send_notification_stimulus(
+            user_id=user_id,
+            source="report-read-result",
+            reason=reason_text,
+        )
+    else:
+        print(f"[{datetime.now()}] report-read notification failed: {post_detail}")
+
+
+async def process_report_read_response(payload_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    report 読了応答処理（読みました）
+
+    Args:
+        payload_data: Slackペイロードデータ
+
+    Returns:
+        Dict[str, Any]: 処理結果
+    """
+    user_id = payload_data.get("user", {}).get("id", "")
+    schedule_id = _extract_schedule_id_from_action(payload_data)
+    channel_id = _extract_action_channel_id(payload_data)
+    thread_ts = _extract_action_thread_ts(payload_data)
+    schedule_thread_ts = ""
+    print(
+        f"[{datetime.now()}] process_report_read_response start: "
+        f"user_id={user_id or '-'} schedule_id={schedule_id or '-'} "
+        f"channel_id={channel_id or '-'} thread_ts={thread_ts or '-'}"
+    )
+
+    if not user_id or not schedule_id:
+        print(
+            f"[{datetime.now()}] process_report_read_response skip: "
+            f"missing user_id/schedule_id user_id={user_id or '-'} schedule_id={schedule_id or '-'}"
+        )
+        return {
+            "status": "success",
+            "detail": "対象が見つかりませんでした。",
+            "response_type": "ephemeral",
+            "replace_original": False,
+            "text": "対象が見つかりませんでした。",
+        }
+
+    session = _get_session()
+    try:
+        schedule = (
+            session.query(Schedule)
+            .filter(
+                Schedule.id == schedule_id,
+                Schedule.user_id == user_id,
+                Schedule.event_type == EventType.REPORT,
+            )
+            .first()
+        )
+        if not schedule:
+            print(
+                f"[{datetime.now()}] process_report_read_response skip: "
+                f"schedule not found user_id={user_id} schedule_id={schedule_id}"
+            )
+            return {
+                "status": "success",
+                "detail": "対象スケジュールが見つかりませんでした。",
+                "response_type": "ephemeral",
+                "replace_original": False,
+                "text": "対象スケジュールが見つかりませんでした。",
+            }
+        schedule_thread_ts = str(schedule.thread_ts or "")
+
+        delivery = (
+            session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule.id).first()
+        )
+
+        existing_action = (
+            session.query(ActionLog.id)
+            .filter(
+                ActionLog.schedule_id == schedule.id,
+                ActionLog.result == ActionResult.REPORT_READ,
+            )
+            .first()
+        )
+        if existing_action:
+            now = datetime.now()
+            needs_commit = False
+            if delivery and delivery.read_at is None:
+                delivery.read_at = now
+                delivery.updated_at = now
+                needs_commit = True
+                print(
+                    f"[{datetime.now()}] process_report_read_response backfill read_at: "
+                    f"schedule_id={schedule.id} user_id={user_id}"
+                )
+            if schedule.state != ScheduleState.DONE:
+                schedule.state = ScheduleState.DONE
+                needs_commit = True
+            if needs_commit:
+                schedule.updated_at = now
+                session.commit()
+            print(
+                f"[{datetime.now()}] process_report_read_response skip: "
+                f"already read schedule_id={schedule.id} user_id={user_id}"
+            )
+            return {
+                "status": "success",
+                "detail": "すでに確認済みです。",
+                "response_type": "ephemeral",
+                "replace_original": False,
+                "text": "すでに確認済みです。",
+            }
+
+        report_type = str(delivery.report_type).lower() if delivery else "weekly"
+        now = datetime.now()
+        session.add(
+            ActionLog(
+                schedule_id=schedule.id,
+                result=ActionResult.REPORT_READ,
+            )
+        )
+        if delivery and delivery.read_at is None:
+            delivery.read_at = now
+            delivery.updated_at = now
+        schedule.state = ScheduleState.DONE
+        schedule.updated_at = now
+        session.commit()
+        print(
+            f"[{datetime.now()}] process_report_read_response success: "
+            f"schedule_id={schedule.id} report_type={report_type} "
+            f"read_at_updated={bool(delivery and delivery.read_at is not None)}"
+        )
+
+        from backend.slack_ui import report_read_response
+
+        detail = "読みました！"
+        text = "来月も頑張りましょう" if report_type == "monthly" else "来週も頑張りましょう"
+        reason_text = (
+            "report: 月次レポートを確認しました"
+            if report_type == "monthly"
+            else "report: 週次レポートを確認しました"
+        )
+        blocks = report_read_response(report_type)
+    except Exception as exc:
+        session.rollback()
+        print(f"[{datetime.now()}] process_report_read_response DB error: {exc}")
+        return {
+            "status": "success",
+            "detail": "処理に失敗しました。",
+            "response_type": "ephemeral",
+            "replace_original": False,
+            "text": "処理に失敗しました。再度お試しください。",
+        }
+    finally:
+        session.close()
+
+    asyncio.create_task(
+        _notify_report_read_result(
+            channel_id=channel_id,
+            user_id=user_id,
+            thread_ts=thread_ts or schedule_thread_ts,
+            text=text,
+            blocks=blocks,
+            reason_text=reason_text,
+        )
+    )
     return {
         "status": "success",
         "detail": detail,

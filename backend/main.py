@@ -13,6 +13,8 @@ from sqlalchemy.orm import sessionmaker
 
 from .api import (
     process_base_commit,
+    process_cal,
+    process_calorie_submit,
     process_commitment_add_row,
     process_commitment_remove_row,
     process_config,
@@ -23,6 +25,7 @@ from .api import (
     process_plan_open_modal,
     process_plan_submit,
     process_remind_response,
+    process_report_read_response,
     process_restart,
     process_stop,
 )
@@ -176,6 +179,8 @@ async def route_slash_command(form_data):
 
     if command == "/base_commit":
         return await process_base_commit(form_data)
+    if command == "/cal":
+        return await process_cal(form_data)
     if command == "/plan":
         return await process_plan(form_data)
     if command == "/stop":
@@ -202,6 +207,8 @@ async def route_interactive_payload(payload_data):
             return await process_plan_submit(payload_data)
         if callback_id == "plan_submit":
             return await process_plan_modal_submit(payload_data)
+        if callback_id == "calorie_submit":
+            return await process_calorie_submit(payload_data)
         if callback_id == "config_submit":
             return await process_config(payload_data)
     elif action_type == "block_actions":
@@ -218,6 +225,8 @@ async def route_interactive_payload(payload_data):
                 return await process_remind_response(payload_data, "YES")
             if action_id == "remind_no":
                 return await process_remind_response(payload_data, "NO")
+            if action_id == "report_read":
+                return await process_report_read_response(payload_data)
             if action_id == "ignore_respond":
                 return await process_ignore_response(payload_data)
 

@@ -15,6 +15,13 @@ TIMEOUT_REMIND=600 # リマインド応答タイムアウト（秒）
 TIMEOUT_REVIEW=600 # 振り返り応答タイムアウト（秒）
 RETRY_DELAY=5 # エラー後リトライの待機時間（分）
 
+# ===== カロリー計算 LLM 設定 =====
+CALORIE_PROVIDER=openai # openai or gemini
+OPENAI_API_KEY={YOUR_OPENAI_API_KEY}
+GEMINI_API_KEY={YOUR_GEMINI_API_KEY}
+CALORIE_OPENAI_MODEL=gpt-4o-mini
+CALORIE_GEMINI_MODEL=gemini-2.0-flash
+
 # ===== Pavlok 罰設定 =====
 PAVLOK_TYPE_PUNISH=zap # 罰のPavlokモード（beep/vibe/zap など）
 PAVLOK_VALUE_PUNISH=35 # 罰のPavlok強度

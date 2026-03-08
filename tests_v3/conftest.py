@@ -102,6 +102,7 @@ def v3_test_data_factory(v3_db_session, v3_test_user_id):
             thread_ts: str | None = None,
             retry_count: int = 0,
             commitment_id: str | None = None,
+            input_value: str | None = None,
             comment: str | None = None,
         ) -> Schedule:
             if run_at is None:
@@ -144,6 +145,7 @@ def v3_test_data_factory(v3_db_session, v3_test_user_id):
                 run_at=run_at,
                 state=state,
                 thread_ts=thread_ts,
+                input_value=input_value,
                 comment=resolved_comment,
                 retry_count=retry_count,
             )
