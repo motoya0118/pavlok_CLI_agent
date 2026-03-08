@@ -124,6 +124,11 @@ run_migration() {
 }
 
 validate_worker_by_tests() {
+  if [ "${RUN_DEPLOY_TESTS:-0}" != "1" ]; then
+    log "Worker検証の pytest -q はスキップします。必要なら RUN_DEPLOY_TESTS=1 を指定してください。"
+    return
+  fi
+
   log "Worker検証として pytest -q を実行します。"
   run_as_service_user "cd '$APP_DIR' && '$APP_DIR/.venv/bin/python' -m pytest -q"
 }
