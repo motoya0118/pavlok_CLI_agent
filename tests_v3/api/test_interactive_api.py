@@ -2,6 +2,7 @@
 import asyncio
 import json
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import create_engine
@@ -1188,7 +1189,9 @@ class TestInteractiveApi:
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
         )
-        monkeypatch.setattr("backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info)
+        monkeypatch.setattr(
+            "backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info
+        )
         monkeypatch.setattr(
             "backend.api.interactive._download_slack_file_bytes",
             _fake_download_slack_file_bytes,
@@ -1280,7 +1283,9 @@ class TestInteractiveApi:
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
         )
-        monkeypatch.setattr("backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info)
+        monkeypatch.setattr(
+            "backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info
+        )
         monkeypatch.setattr("backend.api.interactive.analyze_calorie", _fake_analyze_calorie)
 
         payload_data = {
@@ -1356,7 +1361,9 @@ class TestInteractiveApi:
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
         )
-        monkeypatch.setattr("backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info)
+        monkeypatch.setattr(
+            "backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info
+        )
         monkeypatch.setattr(
             "backend.api.interactive._download_slack_file_bytes",
             _fake_download_slack_file_bytes,
@@ -1432,7 +1439,9 @@ class TestInteractiveApi:
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
         )
-        monkeypatch.setattr("backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info)
+        monkeypatch.setattr(
+            "backend.api.interactive._fetch_slack_file_info", _fake_fetch_slack_file_info
+        )
         monkeypatch.setattr(
             "backend.api.interactive._download_slack_file_bytes",
             _fake_download_slack_file_bytes,
@@ -1899,9 +1908,7 @@ class TestInteractiveApi:
         session = session_factory()
         refreshed_schedule = session.get(Schedule, schedule_id)
         refreshed_delivery = (
-            session.query(ReportDelivery)
-            .filter(ReportDelivery.schedule_id == schedule_id)
-            .first()
+            session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule_id).first()
         )
         read_count = (
             session.query(ActionLog)
@@ -1995,9 +2002,7 @@ class TestInteractiveApi:
 
         session = session_factory()
         refreshed_delivery = (
-            session.query(ReportDelivery)
-            .filter(ReportDelivery.schedule_id == schedule_id)
-            .first()
+            session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule_id).first()
         )
         read_at = refreshed_delivery.read_at if refreshed_delivery is not None else None
         read_count = (
@@ -2094,9 +2099,7 @@ class TestInteractiveApi:
         session = session_factory()
         refreshed_schedule = session.get(Schedule, schedule_id)
         refreshed_delivery = (
-            session.query(ReportDelivery)
-            .filter(ReportDelivery.schedule_id == schedule_id)
-            .first()
+            session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule_id).first()
         )
         assert refreshed_schedule is not None
         assert refreshed_schedule.state == ScheduleState.DONE

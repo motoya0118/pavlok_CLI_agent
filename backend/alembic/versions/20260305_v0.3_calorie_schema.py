@@ -55,4 +55,3 @@ def downgrade() -> None:
     op.drop_index("ix_calorie_records_uploaded_at", table_name="calorie_records")
     op.drop_index("ix_calorie_records_user_id", table_name="calorie_records")
     op.drop_table("calorie_records")
-

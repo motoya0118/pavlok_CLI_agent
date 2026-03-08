@@ -185,7 +185,9 @@ def upgrade() -> None:
         sa.Column("llm_comment", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(["schedule_id"], ["schedules.id"], name="fk_report_deliveries_schedule_id"),
+        sa.ForeignKeyConstraint(
+            ["schedule_id"], ["schedules.id"], name="fk_report_deliveries_schedule_id"
+        ),
         sa.UniqueConstraint("schedule_id", name="uix_report_deliveries_schedule_id"),
         sa.UniqueConstraint(
             "user_id",

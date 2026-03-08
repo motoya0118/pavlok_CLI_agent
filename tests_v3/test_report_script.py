@@ -35,7 +35,9 @@ def _create_remind_schedule(
     run_at: datetime,
     thread_ts: str | None = None,
 ) -> Schedule:
-    commitment = Commitment(user_id=user_id, task=task, time=run_at.strftime("%H:%M:%S"), active=True)
+    commitment = Commitment(
+        user_id=user_id, task=task, time=run_at.strftime("%H:%M:%S"), active=True
+    )
     session.add(commitment)
     session.flush()
     schedule = Schedule(
@@ -231,7 +233,9 @@ def test_main_inserts_report_delivery_only_after_successful_post(tmp_path, monke
         def json(self):
             return {"ok": True, "message": {"ts": "1730000000.000900"}}
 
-    monkeypatch.setattr(report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr(
+        report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse()
+    )
     monkeypatch.setattr(
         report_script,
         "generate_report_comment",
@@ -277,7 +281,9 @@ def test_main_accepts_top_level_ts_from_slack_post_response(tmp_path, monkeypatc
         def json(self):
             return {"ok": True, "ts": "1730000000.000901", "message": {"text": "posted"}}
 
-    monkeypatch.setattr(report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr(
+        report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse()
+    )
     monkeypatch.setattr(
         report_script,
         "generate_report_comment",
@@ -383,7 +389,9 @@ def test_main_prefers_monthly_and_suppresses_weekly_when_monthly_active(tmp_path
     schedule_id = str(target.id)
     session.close()
 
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'report_main_monthly_active.sqlite3'}")
+    monkeypatch.setenv(
+        "DATABASE_URL", f"sqlite:///{tmp_path / 'report_main_monthly_active.sqlite3'}"
+    )
     monkeypatch.setenv("SCHEDULE_ID", schedule_id)
     monkeypatch.setattr(report_script.slack, "require_channel", lambda: "C_TEST")
     monkeypatch.setattr(report_script.slack, "require_bot_token", lambda: "xoxb-test")
@@ -409,9 +417,7 @@ def test_main_prefers_monthly_and_suppresses_weekly_when_monthly_active(tmp_path
 
     session = session_factory()
     created = (
-        session.query(ReportDelivery)
-        .filter(ReportDelivery.schedule_id == schedule_id)
-        .first()
+        session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule_id).first()
     )
     assert created is not None
     assert created.report_type == "monthly"
@@ -420,7 +426,9 @@ def test_main_prefers_monthly_and_suppresses_weekly_when_monthly_active(tmp_path
     session.close()
 
 
-def test_main_creates_replacement_schedule_when_delivery_exists_for_same_schedule(tmp_path, monkeypatch):
+def test_main_creates_replacement_schedule_when_delivery_exists_for_same_schedule(
+    tmp_path, monkeypatch
+):
     session_factory = _new_session(tmp_path, "report_main_replacement_schedule.sqlite3")
     session = session_factory()
     user_id = "U_TEST"
@@ -472,7 +480,9 @@ def test_main_creates_replacement_schedule_when_delivery_exists_for_same_schedul
         def json(self):
             return {"ok": True, "message": {"ts": "1730000000.444499"}}
 
-    monkeypatch.setattr(report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr(
+        report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse()
+    )
 
     report_script.main()
 
@@ -587,9 +597,7 @@ def test_main_uses_run_date_even_if_ui_selected_tomorrow(
 
     session = session_factory()
     created = (
-        session.query(ReportDelivery)
-        .filter(ReportDelivery.schedule_id == schedule_id)
-        .first()
+        session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule_id).first()
     )
     assert created is not None
     assert created.report_type == expected_type
@@ -631,15 +639,15 @@ def test_main_handles_zero_targets_without_comment_failure(tmp_path, monkeypatch
         def json(self):
             return {"ok": True, "message": {"ts": "1730000000.333300"}}
 
-    monkeypatch.setattr(report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr(
+        report_script.slack, "post_message", lambda *args, **kwargs: _FakeResponse()
+    )
 
     report_script.main()
 
     session = session_factory()
     created = (
-        session.query(ReportDelivery)
-        .filter(ReportDelivery.schedule_id == schedule_id)
-        .first()
+        session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule_id).first()
     )
     assert created is not None
     assert "合計: 成功 0 / 失敗 0 / 成功率 0.0%" in created.markdown_table

@@ -119,7 +119,9 @@ def _analyze_with_openai(image_bytes: bytes, mime_type: str) -> tuple[dict[str, 
     try:
         body = response.json()
     except ValueError as exc:
-        raise CalorieAgentError(f"OpenAI returned non-JSON response: {response.status_code}") from exc
+        raise CalorieAgentError(
+            f"OpenAI returned non-JSON response: {response.status_code}"
+        ) from exc
     if response.status_code >= 400:
         raise CalorieAgentError(f"OpenAI API error: {body}")
 
@@ -158,7 +160,9 @@ def _analyze_with_gemini(image_bytes: bytes, mime_type: str) -> tuple[dict[str, 
     try:
         body = response.json()
     except ValueError as exc:
-        raise CalorieAgentError(f"Gemini returned non-JSON response: {response.status_code}") from exc
+        raise CalorieAgentError(
+            f"Gemini returned non-JSON response: {response.status_code}"
+        ) from exc
     if response.status_code >= 400:
         raise CalorieAgentError(f"Gemini API error: {body}")
 
@@ -180,4 +184,3 @@ def analyze_calorie(image_bytes: bytes, mime_type: str) -> tuple[dict[str, Any],
         parsed, raw_json, model = _analyze_with_gemini(image_bytes, mime_type)
         return parsed, raw_json, provider, model
     raise CalorieConfigError(f"Unsupported CALORIE_PROVIDER: {provider}")
-

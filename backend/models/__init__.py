@@ -334,7 +334,9 @@ class ReportDelivery(Base, UUIDMixin, TimestampMixin):
     llm_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        CheckConstraint("lower(report_type) in ('weekly', 'monthly')", name="ck_report_deliveries_type"),
+        CheckConstraint(
+            "lower(report_type) in ('weekly', 'monthly')", name="ck_report_deliveries_type"
+        ),
         UniqueConstraint(
             "user_id",
             "report_type",

@@ -752,7 +752,9 @@ class TestCommandApi:
         assert result["errors"]["PAVLOK_VALUE_NOTION"] == "100以下で入力してください。"
 
     @pytest.mark.asyncio
-    async def test_config_submit_updates_legacy_lowercase_value_type_rows(self, tmp_path, monkeypatch):
+    async def test_config_submit_updates_legacy_lowercase_value_type_rows(
+        self, tmp_path, monkeypatch
+    ):
         db_path = tmp_path / "config_submit_report_legacy_value_type.db"
         database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url, connect_args={"check_same_thread": False})

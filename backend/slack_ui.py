@@ -1420,29 +1420,29 @@ def report_post(
     )
     blocks.extend(
         [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": llm_comment,
-            },
-        },
-        {
-            "type": "actions",
-            "block_id": "report_response",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "読みました",
-                    },
-                    "style": "primary",
-                    "action_id": "report_read",
-                    "value": f'{{"schedule_id": "{schedule_id}", "event_type": "report"}}',
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": llm_comment,
                 },
-            ],
-        },
+            },
+            {
+                "type": "actions",
+                "block_id": "report_response",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "読みました",
+                        },
+                        "style": "primary",
+                        "action_id": "report_read",
+                        "value": f'{{"schedule_id": "{schedule_id}", "event_type": "report"}}',
+                    },
+                ],
+            },
         ]
     )
     return blocks

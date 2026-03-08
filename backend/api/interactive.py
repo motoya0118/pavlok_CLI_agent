@@ -312,8 +312,7 @@ async def _notify_calorie_result(
     ok, detail = await asyncio.to_thread(_post)
     if ok:
         print(
-            f"[{datetime.now()}] calorie notification sent: "
-            f"user_id={user_id} channel={channel_id}"
+            f"[{datetime.now()}] calorie notification sent: user_id={user_id} channel={channel_id}"
         )
     else:
         print(f"[{datetime.now()}] calorie notification failed: {detail}")
@@ -1296,7 +1295,9 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
             "errors": {"next_plan_date": "ユーザー情報を取得できませんでした。"},
         }
 
-    task_rows, next_plan, report_input, validation_errors = _parse_plan_submission_state(state_values)
+    task_rows, next_plan, report_input, validation_errors = _parse_plan_submission_state(
+        state_values
+    )
     if validation_errors:
         return {
             "response_action": "errors",
@@ -1507,7 +1508,9 @@ async def process_plan_modal_submit(payload_data: dict[str, Any]) -> dict[str, A
                     .order_by(Schedule.updated_at.desc(), Schedule.created_at.desc())
                     .first()
                 )
-            if report_schedule_for_message and isinstance(report_schedule_for_message.run_at, datetime):
+            if report_schedule_for_message and isinstance(
+                report_schedule_for_message.run_at, datetime
+            ):
                 report_for_message = {
                     "date": _to_day_label_from_datetime(report_schedule_for_message.run_at, now),
                     "time": report_schedule_for_message.run_at.strftime("%H:%M"),
@@ -2396,9 +2399,7 @@ async def process_report_read_response(payload_data: dict[str, Any]) -> dict[str
         schedule_thread_ts = str(schedule.thread_ts or "")
 
         delivery = (
-            session.query(ReportDelivery)
-            .filter(ReportDelivery.schedule_id == schedule.id)
-            .first()
+            session.query(ReportDelivery).filter(ReportDelivery.schedule_id == schedule.id).first()
         )
 
         existing_action = (

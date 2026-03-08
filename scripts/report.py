@@ -79,7 +79,9 @@ def decide_report_type(session, user_id: str, run_date: date) -> str:
     return "monthly"
 
 
-def resolve_report_period(session, user_id: str, run_date: date, report_type: str) -> tuple[date, date]:
+def resolve_report_period(
+    session, user_id: str, run_date: date, report_type: str
+) -> tuple[date, date]:
     """Resolve aggregation period for monthly/weekly report."""
     if report_type == "monthly":
         return previous_month_period(run_date)
@@ -164,13 +166,13 @@ def aggregate_report_stats(
                 "success_rate": 0.0,
             }
         if str(schedule_id) in success_schedule_ids:
-            by_commitment[group_key]["success_count"] = int(
-                by_commitment[group_key]["success_count"]
-            ) + 1
+            by_commitment[group_key]["success_count"] = (
+                int(by_commitment[group_key]["success_count"]) + 1
+            )
         else:
-            by_commitment[group_key]["failure_count"] = int(
-                by_commitment[group_key]["failure_count"]
-            ) + 1
+            by_commitment[group_key]["failure_count"] = (
+                int(by_commitment[group_key]["failure_count"]) + 1
+            )
 
     commitment_rows: list[dict[str, float | int | str]] = []
     for row in by_commitment.values():
@@ -422,7 +424,11 @@ def main() -> None:
             print(f"Error: Schedule {schedule_id} is not processing state")
             sys.exit(1)
 
-        run_date = schedule.run_at.date() if isinstance(schedule.run_at, datetime) else datetime.now().date()
+        run_date = (
+            schedule.run_at.date()
+            if isinstance(schedule.run_at, datetime)
+            else datetime.now().date()
+        )
         user_id = str(schedule.user_id)
         report_type = decide_report_type(session, user_id, run_date)
         period_start, period_end = resolve_report_period(session, user_id, run_date, report_type)
