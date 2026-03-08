@@ -206,8 +206,19 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# DB
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
+*.db-wal
+*.sqlite-wal
+*.sqlite3-wal
+*.db-shm
+*.sqlite-shm
+*.sqlite3-shm
+
 # custom
-app.db
-oni.db
-backend/oni.db
 backend/log

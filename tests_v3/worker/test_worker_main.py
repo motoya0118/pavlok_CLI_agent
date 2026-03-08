@@ -175,6 +175,22 @@ class TestPunishmentWorker:
         assert schedule.state == ScheduleState.PROCESSING
 
     @pytest.mark.asyncio
+    async def test_process_schedule_report_event(self, v3_db_session, v3_test_data_factory):
+        """reportイベントを処理できること"""
+        schedule = v3_test_data_factory.create_schedule(
+            event_type=EventType.REPORT,
+            run_at=datetime.now() - timedelta(minutes=1),
+            state=ScheduleState.PENDING,
+        )
+
+        worker = PunishmentWorker(v3_db_session)
+        with patch.object(worker, "execute_script") as mock_execute:
+            await worker.process_schedule(schedule)
+
+        assert schedule.state == ScheduleState.PROCESSING
+        mock_execute.assert_awaited_once_with("report.py", schedule)
+
+    @pytest.mark.asyncio
     async def test_process_schedule_failure_retry(self, v3_db_session, v3_test_data_factory):
         """失敗時にretry_countを増やすこと"""
         schedule = v3_test_data_factory.create_schedule(
@@ -279,6 +295,24 @@ class TestPunishmentWorker:
 
         monitored_schedule_ids = {str(call.args[1].id) for call in mock_ignore.call_args_list}
         assert str(remind_schedule.id) in monitored_schedule_ids
+
+    @pytest.mark.asyncio
+    async def test_monitor_processing_includes_report(self, v3_db_session, v3_test_data_factory):
+        """processing監視対象にreportも含まれること"""
+        report_schedule = v3_test_data_factory.create_schedule(
+            event_type=EventType.REPORT,
+            run_at=datetime.now() - timedelta(minutes=20),
+            state=ScheduleState.PROCESSING,
+            comment="report",
+        )
+
+        worker = PunishmentWorker(v3_db_session)
+        with patch("backend.worker.ignore_mode.detect_ignore_mode") as mock_ignore:
+            mock_ignore.return_value = {"detected": False, "ignore_time": 0}
+            await worker.monitor_processing_schedules()
+
+        monitored_schedule_ids = {str(call.args[1].id) for call in mock_ignore.call_args_list}
+        assert str(report_schedule.id) in monitored_schedule_ids
 
     @pytest.mark.asyncio
     async def test_main_loop_interval(self, v3_db_session):

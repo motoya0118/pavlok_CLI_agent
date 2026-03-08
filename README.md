@@ -134,20 +134,25 @@ features:
       url: {ngorkのurl}/slack/gateway
       description: 鬼コーチの概要・コマンド説明・注意点
       should_escape: false
+    - command: /cal
+      url: {ngorkのurl}/slack/gateway
+      description: 食事写真からカロリー計算
+      should_escape: false
 oauth_config:
   scopes:
     user:
       - channels:history
       - chat:write
     bot:
+      - files:read
       - channels:history
       - chat:write
-      - groups:history
       - commands
+      - groups:history
 settings:
   interactivity:
     is_enabled: true
-    request_url: {ngorkのurl}
+    request_url: {ngorkのurl}/slack/gateway
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false

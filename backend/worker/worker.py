@@ -36,7 +36,7 @@ class PunishmentWorker:
         """Normalize config value to bool safely."""
         if isinstance(value, bool):
             return value
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             return value != 0
         if isinstance(value, str):
             return value.strip().lower() in {"1", "true", "yes", "on"}
@@ -134,7 +134,7 @@ class PunishmentWorker:
         監視対象候補のprocessing scheduleを取得する
 
         Returns:
-            processingかつ(plan/remind)かつrun_at <= nowのスケジュールリスト
+            processingかつ(plan/remind/report)かつrun_at <= nowのスケジュールリスト
         """
         from backend.models import EventType, Schedule, ScheduleState
 
@@ -143,7 +143,7 @@ class PunishmentWorker:
             self.session.query(Schedule)
             .filter(
                 Schedule.state == ScheduleState.PROCESSING,
-                Schedule.event_type.in_([EventType.PLAN, EventType.REMIND]),
+                Schedule.event_type.in_([EventType.PLAN, EventType.REMIND, EventType.REPORT]),
                 Schedule.run_at <= now,
             )
             .all()
@@ -207,7 +207,7 @@ class PunishmentWorker:
         スクリプトを実行する
 
         Args:
-            script_name: スクリプト名（plan.py, remind.py）
+            script_name: スクリプト名（plan.py, remind.py, report.py）
             schedule: 対象スケジュール
         """
         import subprocess
@@ -253,6 +253,8 @@ class PunishmentWorker:
                 await self.execute_script("plan.py", schedule)
             elif schedule.event_type == EventType.REMIND:
                 await self.execute_script("remind.py", schedule)
+            elif schedule.event_type == EventType.REPORT:
+                await self.execute_script("report.py", schedule)
 
             # Keep processing until user responds from Slack (YES/NO).
             # This applies to both plan and remind.
@@ -277,7 +279,7 @@ class PunishmentWorker:
 
     async def monitor_processing_schedules(self) -> None:
         """
-        processing状態のplan/remindを監視してignoreを検知する
+        processing状態のplan/remind/reportを監視してignoreを検知する
         """
         from backend.worker.ignore_mode import detect_ignore_mode
 

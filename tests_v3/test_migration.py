@@ -76,8 +76,89 @@ class TestV3Migration:
             "punishments",
             "configurations",
             "config_audit_log",
+            "report_deliveries",
+            "calorie_records",
         }
         assert expected_tables.issubset(tables), f"Missing tables: {expected_tables - tables}"
+
+    def test_upgrade_upserts_report_defaults_for_existing_users(self, tmp_path, monkeypatch):
+        """Upgrade should backfill REPORT_* defaults for existing users only when missing."""
+        from alembic import command
+        from sqlalchemy import create_engine, text
+
+        backend_root = Path(__file__).resolve().parents[1] / "backend"
+        alembic_ini = backend_root / "alembic.ini"
+
+        db_path = tmp_path / "upgrade_report_defaults.db"
+        db_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", db_url)
+
+        config = Config(str(alembic_ini))
+        command.upgrade(config, "20260220_v0.3_schedules_commitment_id_order")
+
+        engine = create_engine(db_url, future=True)
+        now = "2026-03-05 07:00:00"
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO commitments (id, user_id, time, task, active, created_at, updated_at)
+                    VALUES
+                    ('c1', 'U_EXISTING_1', '09:00:00', 'task1', 1, :now, :now)
+                    """
+                ),
+                {"now": now},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO schedules (
+                        id, commitment_id, user_id, event_type, run_at, state,
+                        thread_ts, comment, yes_comment, no_comment, retry_count, created_at, updated_at
+                    )
+                    VALUES
+                    ('s1', NULL, 'U_EXISTING_2', 'PLAN', :now, 'PENDING',
+                     NULL, NULL, NULL, NULL, 0, :now, :now)
+                    """
+                ),
+                {"now": now},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO configurations (
+                        id, user_id, key, value, value_type,
+                        description, default_value, version, created_at, updated_at
+                    )
+                    VALUES (
+                        'cfg1', 'U_EXISTING_1', 'REPORT_TIME', '08:30', 'str',
+                        'preset', '08:30', 1, :now, :now
+                    )
+                    """
+                ),
+                {"now": now},
+            )
+
+        command.upgrade(config, "head")
+
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT user_id, key, value
+                    FROM configurations
+                    WHERE user_id IN ('U_EXISTING_1', 'U_EXISTING_2')
+                      AND key IN ('REPORT_WEEKDAY', 'REPORT_TIME')
+                    ORDER BY user_id, key
+                    """
+                )
+            ).all()
+
+        values = {(row[0], row[1]): row[2] for row in rows}
+        assert values[("U_EXISTING_1", "REPORT_TIME")] == "08:30"
+        assert values[("U_EXISTING_1", "REPORT_WEEKDAY")] == "sat"
+        assert values[("U_EXISTING_2", "REPORT_TIME")] == "07:00"
+        assert values[("U_EXISTING_2", "REPORT_WEEKDAY")] == "sat"
 
     def test_tables_created_by_models(self, v3_db_session):
         """Test that models.create_all() creates expected tables."""
@@ -93,6 +174,8 @@ class TestV3Migration:
             "punishments",
             "configurations",
             "config_audit_log",
+            "report_deliveries",
+            "calorie_records",
         }
 
         # Get actual tables
@@ -116,6 +199,7 @@ class TestV3Migration:
             "run_at",
             "state",
             "thread_ts",
+            "input_value",
             "comment",
             "yes_comment",
             "no_comment",
@@ -156,6 +240,7 @@ class TestV3Migration:
             "run_at",
             "state",
             "thread_ts",
+            "input_value",
             "comment",
             "yes_comment",
             "no_comment",

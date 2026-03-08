@@ -345,6 +345,26 @@ class TestBlockKitPlan:
         # Should have at least the commitments + next_plan section
         assert len(task_sections) >= len(commitments)
 
+    def test_plan_input_modal_with_report_fields(self):
+        """Plan modal should reuse date/time UI for report input when enabled."""
+        from backend.slack_ui import plan_input_modal
+
+        commitments = [{"id": "1", "time": "07:00", "task": "朝の瞑想"}]
+        modal = plan_input_modal(
+            commitments,
+            report_input={"show": True, "date": "tomorrow", "time": "06:30"},
+        )
+
+        blocks = modal["blocks"]
+        report_date = next((b for b in blocks if b.get("block_id") == "report_date"), None)
+        report_time = next((b for b in blocks if b.get("block_id") == "report_time"), None)
+
+        assert report_date is not None
+        assert report_time is not None
+        assert report_date["element"]["initial_option"]["value"] == "tomorrow"
+        assert [opt["value"] for opt in report_date["element"]["options"]] == ["today", "tomorrow"]
+        assert report_time["element"]["initial_time"] == "06:30"
+
     def test_plan_complete_notification(self):
         """Plan complete notification should show scheduled tasks"""
         from backend.slack_ui import plan_complete_notification
@@ -364,6 +384,95 @@ class TestBlockKitPlan:
         # Should have section with task list
         sections = [b for b in blocks if b.get("type") == "section"]
         assert len(sections) >= 1
+        assert all("レポート予定" not in str(s.get("text", {}).get("text", "")) for s in sections)
+
+    def test_plan_complete_notification_includes_report_when_present(self):
+        """Plan complete notification should show report schedule when provided."""
+        from backend.slack_ui import plan_complete_notification
+
+        scheduled_tasks = [
+            {"task": "朝の瞑想", "time": "07:00", "date": "今日"},
+        ]
+        next_plan = {"date": "明日", "time": "07:00"}
+        report_plan = {"date": "明日", "time": "08:45"}
+
+        blocks = plan_complete_notification(
+            scheduled_tasks,
+            next_plan,
+            report_plan=report_plan,
+        )
+
+        report_sections = [
+            b
+            for b in blocks
+            if b.get("type") == "section"
+            and "レポート予定" in str(b.get("text", {}).get("text", ""))
+        ]
+        assert len(report_sections) == 1
+        assert "明日 08:45" in report_sections[0]["text"]["text"]
+
+
+class TestBlockKitCalorie:
+    """Test /cal modal UI"""
+
+    def test_calorie_input_modal_structure(self):
+        from backend.slack_ui import calorie_input_modal
+
+        modal = calorie_input_modal()
+        assert modal["type"] == "modal"
+        assert modal["callback_id"] == "calorie_submit"
+        assert modal["submit"]["text"] == "解析開始"
+
+        blocks = modal["blocks"]
+        image_input = next((b for b in blocks if b.get("block_id") == "calorie_image"), None)
+        assert image_input is not None
+        assert image_input["element"]["type"] == "file_input"
+        assert image_input["element"]["max_files"] == 1
+        assert "jpg" in image_input["element"]["filetypes"]
+
+
+class TestBlockKitReport:
+    """Test report event UI"""
+
+    def test_report_post_has_read_button(self):
+        from backend.slack_ui import report_post
+
+        blocks = report_post(
+            schedule_id="S_REPORT",
+            report_type="weekly",
+            period_start="2026-03-01",
+            period_end="2026-03-07",
+            summary_text="成功 1 / 失敗 0 / 成功率 100.0%",
+            commitment_stats=[
+                {
+                    "task": "運動する",
+                    "success_count": 1,
+                    "failure_count": 0,
+                    "success_rate": 100.0,
+                }
+            ],
+            llm_comment="コメント",
+        )
+
+        actions = [b for b in blocks if b.get("type") == "actions"]
+        assert len(actions) == 1
+        button = actions[0]["elements"][0]
+        assert button["action_id"] == "report_read"
+        assert "S_REPORT" in button["value"]
+        table_sections = [b for b in blocks if b.get("type") == "section"]
+        assert len(table_sections) >= 3
+        assert "集計サマリー" in table_sections[1]["text"]["text"]
+        assert "運動する" in table_sections[2]["text"]["text"]
+        assert any("コーチコメント" in s["text"]["text"] for s in table_sections)
+        assert all(isinstance(s["text"]["text"], str) for s in table_sections)
+
+    def test_report_read_response_varies_by_type(self):
+        from backend.slack_ui import report_read_response
+
+        weekly = report_read_response("weekly")
+        monthly = report_read_response("monthly")
+        assert "来週も頑張りましょう" in weekly[0]["text"]["text"]
+        assert "来月も頑張りましょう" in monthly[0]["text"]["text"]
 
 
 class TestBlockKitRemind:
