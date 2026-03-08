@@ -87,6 +87,249 @@ class TestInteractiveApi:
         assert result["response_action"] == "clear"
 
     @pytest.mark.asyncio
+    async def test_base_commit_submit_keeps_prefilled_rows_when_state_values_are_empty(
+        self, monkeypatch, tmp_path
+    ):
+        db_path = tmp_path / "base_commit_prefill_submit.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        async def _fake_notify_commitment_saved(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(
+            "backend.api.interactive._notify_commitment_saved",
+            _fake_notify_commitment_saved,
+        )
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
+        session_factory = sessionmaker(bind=engine)
+
+        user_id = "U03JBULT484"
+        session = session_factory()
+        session.add_all(
+            [
+                Commitment(user_id=user_id, task="朝の瞑想", time="07:00:00", active=True),
+                Commitment(user_id=user_id, task="振り返り", time="22:00:00", active=True),
+            ]
+        )
+        session.commit()
+        session.close()
+
+        modal = base_commit_modal(
+            [
+                {"task": "朝の瞑想", "time": "07:00:00"},
+                {"task": "振り返り", "time": "22:00:00"},
+            ]
+        )
+        payload_data = {
+            "type": "view_submission",
+            "user": {"id": user_id},
+            "view": {
+                **modal,
+                "state": {"values": {}},
+            },
+        }
+
+        result = await process_plan_submit(payload_data)
+        assert result["response_action"] == "clear"
+
+        session = session_factory()
+        rows = (
+            session.query(Commitment)
+            .filter(Commitment.user_id == user_id)
+            .order_by(Commitment.time.asc())
+            .all()
+        )
+        assert len(rows) == 2
+        assert [(row.task, row.time) for row in rows] == [
+            ("朝の瞑想", "07:00:00"),
+            ("振り返り", "22:00:00"),
+        ]
+        session.close()
+
+    @pytest.mark.asyncio
+    async def test_base_commit_submit_updates_time_without_replacing_commitment_id(
+        self, monkeypatch, tmp_path
+    ):
+        db_path = tmp_path / "base_commit_update_time.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        async def _fake_notify_commitment_saved(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(
+            "backend.api.interactive._notify_commitment_saved",
+            _fake_notify_commitment_saved,
+        )
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
+        session_factory = sessionmaker(bind=engine)
+
+        user_id = "U03JBULT484"
+        session = session_factory()
+        existing = Commitment(user_id=user_id, task="朝の瞑想", time="07:00:00", active=True)
+        session.add(existing)
+        session.commit()
+        existing_id = existing.id
+        session.close()
+
+        payload_data = {
+            "type": "view_submission",
+            "user": {"id": user_id},
+            "view": {
+                "callback_id": "base_commit_submit",
+                "state": {
+                    "values": {
+                        "task_1": {"task": "朝の瞑想", "time": "08:30"},
+                    }
+                },
+            },
+        }
+
+        result = await process_plan_submit(payload_data)
+        assert result["response_action"] == "clear"
+
+        session = session_factory()
+        rows = (
+            session.query(Commitment)
+            .filter(Commitment.user_id == user_id)
+            .order_by(Commitment.created_at.asc())
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].id == existing_id
+        assert rows[0].task == "朝の瞑想"
+        assert rows[0].time == "08:30:00"
+        assert rows[0].active is True
+        session.close()
+
+    @pytest.mark.asyncio
+    async def test_base_commit_submit_inactivates_removed_task_and_inserts_new_task(
+        self, monkeypatch, tmp_path
+    ):
+        db_path = tmp_path / "base_commit_soft_delete.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        async def _fake_notify_commitment_saved(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(
+            "backend.api.interactive._notify_commitment_saved",
+            _fake_notify_commitment_saved,
+        )
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
+        session_factory = sessionmaker(bind=engine)
+
+        user_id = "U03JBULT484"
+        session = session_factory()
+        morning = Commitment(user_id=user_id, task="朝の瞑想", time="07:00:00", active=True)
+        noon = Commitment(user_id=user_id, task="昼の散歩", time="12:00:00", active=True)
+        session.add_all([morning, noon])
+        session.commit()
+        morning_id = morning.id
+        noon_id = noon.id
+        session.close()
+
+        payload_data = {
+            "type": "view_submission",
+            "user": {"id": user_id},
+            "view": {
+                "callback_id": "base_commit_submit",
+                "state": {
+                    "values": {
+                        "task_1": {"task": "朝の瞑想", "time": "08:30"},
+                        "task_2": {"task": "夜の読書", "time": "21:00"},
+                    }
+                },
+            },
+        }
+
+        result = await process_plan_submit(payload_data)
+        assert result["response_action"] == "clear"
+
+        session = session_factory()
+        rows = (
+            session.query(Commitment)
+            .filter(Commitment.user_id == user_id)
+            .order_by(Commitment.created_at.asc())
+            .all()
+        )
+        assert len(rows) == 3
+
+        refreshed_morning = session.get(Commitment, morning_id)
+        refreshed_noon = session.get(Commitment, noon_id)
+        new_night = next(row for row in rows if row.task == "夜の読書")
+
+        assert refreshed_morning is not None
+        assert refreshed_morning.active is True
+        assert refreshed_morning.time == "08:30:00"
+
+        assert refreshed_noon is not None
+        assert refreshed_noon.active is False
+        assert refreshed_noon.time == "12:00:00"
+
+        assert new_night.active is True
+        assert new_night.time == "21:00:00"
+        session.close()
+
+    @pytest.mark.asyncio
+    async def test_base_commit_submit_rejects_duplicate_tasks(self, monkeypatch, tmp_path):
+        db_path = tmp_path / "base_commit_duplicate_task.sqlite3"
+        database_url = f"sqlite:///{db_path}"
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setattr("backend.api.interactive._SESSION_FACTORY", None)
+        monkeypatch.setattr("backend.api.interactive._SESSION_DB_URL", None)
+
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(bind=engine)
+
+        payload_data = {
+            "type": "view_submission",
+            "user": {"id": "U03JBULT484"},
+            "view": {
+                "callback_id": "base_commit_submit",
+                "state": {
+                    "values": {
+                        "task_1": {"task": "朝の瞑想", "time": "07:00"},
+                        "task_2": {"task": " 朝の瞑想 ", "time": "09:00"},
+                    }
+                },
+            },
+        }
+
+        result = await process_plan_submit(payload_data)
+        assert result["response_action"] == "errors"
+        assert result["errors"] == {
+            "commitment_1": "同じタスク名は登録できません。",
+            "commitment_2": "同じタスク名は登録できません。",
+        }
+
+    @pytest.mark.asyncio
     async def test_plan_modal_submit_saves_schedules_and_returns_clear(self, monkeypatch, tmp_path):
         db_path = tmp_path / "plan_submit.sqlite3"
         database_url = f"sqlite:///{db_path}"

@@ -16,10 +16,12 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy import (
     Enum as SQLEnum,
@@ -171,6 +173,15 @@ class Commitment(Base, UUIDMixin, TimestampMixin):
     """コミットメント（ユーザーの毎日の予定）"""
 
     __tablename__ = "commitments"
+    __table_args__ = (
+        Index(
+            "uix_commitments_user_task_active",
+            "user_id",
+            "task",
+            unique=True,
+            sqlite_where=text("active = 1"),
+        ),
+    )
 
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     time: Mapped[str] = mapped_column(String(8), nullable=False)  # HH:MM:SS
