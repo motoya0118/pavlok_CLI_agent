@@ -672,6 +672,144 @@ def _coach_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
     ]
 
 
+def _body_composition_section(config_values: dict[str, str]) -> list[dict[str, Any]]:
+    """Generate body composition configuration section."""
+    current_gender = config_values.get("GENDER", "-")
+    current_age = config_values.get("AGE", "30")
+    current_height = config_values.get("HEIGHT_CM", "170")
+    current_weight = config_values.get("WEIGHT_KG", "65.0")
+    current_activity = config_values.get("ACTIVITY_LEVEL", "1.375")
+    current_goal = config_values.get("DIET_GOAL", "maintain")
+
+    # GENDER options
+    gender_options = [
+        {"text": {"type": "plain_text", "text": "男性"}, "value": "male"},
+        {"text": {"type": "plain_text", "text": "女性"}, "value": "female"},
+    ]
+    gender_initial = None
+    for opt in gender_options:
+        if opt["value"] == current_gender:
+            gender_initial = opt
+            break
+    if gender_initial is None:
+        gender_initial = gender_options[0]  # デフォルトを設定
+
+    # ACTIVITY_LEVEL options
+    activity_options = [
+        {"text": {"type": "plain_text", "text": "1.2 - ほぼ運動しない"}, "value": "1.2"},
+        {"text": {"type": "plain_text", "text": "1.375 - 軽い運動（週1-3日）"}, "value": "1.375"},
+        {"text": {"type": "plain_text", "text": "1.55 - 中程度（週3-5日）"}, "value": "1.55"},
+        {"text": {"type": "plain_text", "text": "1.725 - 活発（週6-7日）"}, "value": "1.725"},
+    ]
+    activity_initial = None
+    for opt in activity_options:
+        if opt["value"] == current_activity:
+            activity_initial = opt
+            break
+    if activity_initial is None:
+        activity_initial = activity_options[1]  # 1.375をデフォルト
+
+    # DIET_GOAL options
+    goal_options = [
+        {"text": {"type": "plain_text", "text": "減量（-500kcal）"}, "value": "lose"},
+        {"text": {"type": "plain_text", "text": "維持"}, "value": "maintain"},
+        {"text": {"type": "plain_text", "text": "増量（+500kcal）"}, "value": "gain"},
+    ]
+    goal_initial = None
+    for opt in goal_options:
+        if opt["value"] == current_goal:
+            goal_initial = opt
+            break
+    if goal_initial is None:
+        goal_initial = goal_options[1]  # maintainをデフォルト
+
+    return [
+        {
+            "type": "divider",
+        },
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "🏃 体組成・活動量",
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "TDEE計算とPFC目標値の算出に使用します。",
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "GENDER",
+            "label": {"type": "plain_text", "text": "性別"},
+            "element": {
+                "type": "static_select",
+                "action_id": "GENDER_select",
+                "options": gender_options,
+                "initial_option": gender_initial,
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "AGE",
+            "label": {"type": "plain_text", "text": "年齢"},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "AGE_input",
+                "placeholder": {"type": "plain_text", "text": "30"},
+                "initial_value": current_age if current_age != "-" else "",
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "HEIGHT_CM",
+            "label": {"type": "plain_text", "text": "身長 (cm)"},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "HEIGHT_CM_input",
+                "placeholder": {"type": "plain_text", "text": "170"},
+                "initial_value": current_height if current_height != "-" else "",
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "WEIGHT_KG",
+            "label": {"type": "plain_text", "text": "体重 (kg)"},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "WEIGHT_KG_input",
+                "placeholder": {"type": "plain_text", "text": "65.0"},
+                "initial_value": current_weight if current_weight != "-" else "",
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "ACTIVITY_LEVEL",
+            "label": {"type": "plain_text", "text": "活動レベル"},
+            "element": {
+                "type": "static_select",
+                "action_id": "ACTIVITY_LEVEL_select",
+                "options": activity_options,
+                "initial_option": activity_initial,
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "DIET_GOAL",
+            "label": {"type": "plain_text", "text": "目的"},
+            "element": {
+                "type": "static_select",
+                "action_id": "DIET_GOAL_select",
+                "options": goal_options,
+                "initial_option": goal_initial,
+            },
+        },
+    ]
+
+
 def config_modal(config_values: dict[str, str]) -> dict[str, Any]:
     """Generate /config modal"""
     blocks = []
@@ -679,6 +817,7 @@ def config_modal(config_values: dict[str, str]) -> dict[str, Any]:
     blocks.extend(_ignore_section(config_values))
     blocks.extend(_report_section(config_values))
     blocks.extend(_coach_section(config_values))
+    blocks.extend(_body_composition_section(config_values))
 
     # Add action buttons
     blocks.append(
@@ -1188,6 +1327,77 @@ def plan_complete_notification(
 # ============================================================================
 # Calorie Modal (/cal)
 # ============================================================================
+
+
+def _build_calorie_with_remaining_blocks(
+    items: list[dict[str, Any]],
+    uploaded_at: datetime,
+    remaining_data: dict[str, Any],
+    advice: str,
+) -> list[dict[str, Any]]:
+    """Build calorie notification blocks with remaining intake.
+
+    Args:
+        items: List of dict with food_name, calorie, protein_g, fat_g, carbs_g
+        uploaded_at: Upload datetime (for display)
+        remaining_data: Dict with goal, consumed, remaining keys
+        advice: Advice text to display
+
+    Returns:
+        List of Block Kit blocks
+    """
+    # 今回の食事を構築
+    meal_parts = []
+    for item in items:
+        p = item.get("protein_g", 0)
+        f = item.get("fat_g", 0)
+        c = item.get("carbs_g", 0)
+        meal_parts.append(
+            f"• {item['food_name']}: {item['calorie']}kcal (P:{p:.1f}g F:{f:.1f}g C:{c:.1f}g)"
+        )
+
+    goal = remaining_data["goal"]
+    consumed = remaining_data["consumed"]
+    remaining = remaining_data["remaining"]
+
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": "📊 本日の摂取サマリー"}},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*🍽️ 今回の食事*\n" + "\n".join(meal_parts)},
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*📈 本日の合計*\n"
+                    f"カロリー: {consumed['calorie']} / {goal['daily_calorie_goal']} kcal\n"
+                    f"タンパク質: {consumed['protein_g']:.1f} / {goal['protein_g']:.1f} g\n"
+                    f"脂質: {consumed['fat_g']:.1f} / {goal['fat_g']:.1f} g\n"
+                    f"炭水化物: {consumed['carbs_g']:.1f} / {goal['carbs_g']:.1f} g"
+                ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*✅ 残りの摂取許容値*\n"
+                    f"カロリー: {remaining['calorie']} kcal\n"
+                    f"タンパク質: {remaining['protein_g']:.1f} g\n"
+                    f"脂質: {remaining['fat_g']:.1f} g\n"
+                    f"炭水化物: {remaining['carbs_g']:.1f} g"
+                ),
+            },
+        },
+        {"type": "divider"},
+        {"type": "section", "text": {"type": "mrkdwn", "text": f"*💬 アドバイス*\n{advice}"}},
+    ]
+    return blocks
 
 
 def calorie_input_modal() -> dict[str, Any]:

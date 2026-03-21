@@ -91,6 +91,40 @@ CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
         "default": DEFAULT_COACH_CHARACTOR,
         "value_type": ConfigValueType.STR,
     },
+    # v0.3.2: 体組成・活動量設定
+    "GENDER": {
+        "default": "-",
+        "value_type": ConfigValueType.STR,
+        "allowed": {"male", "female"},
+    },
+    "AGE": {
+        "default": "30",
+        "value_type": ConfigValueType.INT,
+        "min": 10,
+        "max": 100,
+    },
+    "HEIGHT_CM": {
+        "default": "170",
+        "value_type": ConfigValueType.INT,
+        "min": 100,
+        "max": 250,
+    },
+    "WEIGHT_KG": {
+        "default": "65.0",
+        "value_type": ConfigValueType.FLOAT,
+        "min": 30,
+        "max": 200,
+    },
+    "ACTIVITY_LEVEL": {
+        "default": "1.375",
+        "value_type": ConfigValueType.STR,
+        "allowed": {"1.2", "1.375", "1.55", "1.725"},
+    },
+    "DIET_GOAL": {
+        "default": "maintain",
+        "value_type": ConfigValueType.STR,
+        "allowed": {"lose", "maintain", "gain"},
+    },
 }
 
 _SESSION_FACTORY = None

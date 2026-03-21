@@ -20,6 +20,7 @@ from backend.api.interactive import (
     process_remind_response,
     process_report_read_response,
 )
+from backend.calorie_agent import CalorieAnalysisResult
 from backend.models import (
     ActionLog,
     ActionResult,
@@ -1440,6 +1441,69 @@ class TestInteractiveApi:
         Base.metadata.create_all(bind=engine)
         session_factory = sessionmaker(bind=engine)
 
+        # v0.3.2: 体組成設定を追加
+        session = session_factory()
+        session.add_all(
+            [
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="GENDER",
+                    value="male",
+                    value_type=ConfigValueType.STR,
+                    default_value="-",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="AGE",
+                    value="30",
+                    value_type=ConfigValueType.INT,
+                    default_value="30",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="HEIGHT_CM",
+                    value="170",
+                    value_type=ConfigValueType.INT,
+                    default_value="170",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="WEIGHT_KG",
+                    value="65.0",
+                    value_type=ConfigValueType.FLOAT,
+                    default_value="65.0",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="ACTIVITY_LEVEL",
+                    value="1.375",
+                    value_type=ConfigValueType.STR,
+                    default_value="1.375",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="DIET_GOAL",
+                    value="maintain",
+                    value_type=ConfigValueType.STR,
+                    default_value="maintain",
+                    version=1,
+                    description="Test",
+                ),
+            ]
+        )
+        session.commit()
+        session.close()
+
         notified: list[dict[str, object]] = []
 
         async def _fake_notify_calorie_result(channel_id, user_id, message, blocks=None):
@@ -1467,23 +1531,46 @@ class TestInteractiveApi:
             assert bot_token == "xoxb-test"
             return b"fake-image-bytes"
 
-        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str):
+        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str, provider: str = "openai"):
             assert image_bytes == b"fake-image-bytes"
             assert mime_type == "image/jpeg"
-            return (
-                {
-                    "schema_version": "calorie_v1",
-                    "items": [
-                        {"food_name": "バナナ", "calorie": 95},
-                        {"food_name": None, "calorie": "120"},
-                    ],
-                    "total_calorie": 215,
-                },
-                '{"schema_version":"calorie_v1","items":[{"food_name":"バナナ","calorie":95},{"food_name":null,"calorie":120}],"total_calorie":215}',
-                "openai",
-                "gpt-4o-mini",
+            result = CalorieAnalysisResult(
+                schema_version="calorie_v2",
+                items=[
+                    {
+                        "food_name": "バナナ",
+                        "calorie": 95,
+                        "protein_g": 1.1,
+                        "fat_g": 0.3,
+                        "carbs_g": 23.0,
+                    },
+                    {
+                        "food_name": "不明",
+                        "calorie": 120,
+                        "protein_g": 2.5,
+                        "fat_g": 0.5,
+                        "carbs_g": 25.0,
+                    },
+                ],
+                total_calorie=215,
+                total_protein_g=3.6,
+                total_fat_g=0.8,
+                total_carbs_g=48.0,
             )
+            return (result, result.model_dump_json(), "openai", "gpt-4o-mini")
 
+        # v0.3.2: AdviceGeneratorをモック
+        class _FakeAdviceGenerator:
+            def __init__(self, character: str, provider: str):
+                pass
+
+            def generate(self, remaining: dict, consumed: dict, goal: dict) -> str:
+                return "テストアドバイス: 順調だっちゃ！"
+
+        monkeypatch.setattr(
+            "backend.api.interactive.AdviceGenerator",
+            _FakeAdviceGenerator,
+        )
         monkeypatch.setattr(
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
@@ -1532,6 +1619,9 @@ class TestInteractiveApi:
         assert len(rows) == 2
         assert [r.food_name for r in rows] == ["バナナ", "不明"]
         assert [r.calorie for r in rows] == [95, 120]
+        assert [r.protein_g for r in rows] == [1.1, 2.5]
+        assert [r.fat_g for r in rows] == [0.3, 0.5]
+        assert [r.carbs_g for r in rows] == [23.0, 25.0]
         assert all(r.llm_raw_response_json for r in rows)
         assert all(r.provider == "openai" for r in rows)
         assert all(r.model == "gpt-4o-mini" for r in rows)
@@ -1559,6 +1649,69 @@ class TestInteractiveApi:
         Base.metadata.create_all(bind=engine)
         session_factory = sessionmaker(bind=engine)
 
+        # v0.3.2: 体組成設定を追加
+        session = session_factory()
+        session.add_all(
+            [
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="GENDER",
+                    value="male",
+                    value_type=ConfigValueType.STR,
+                    default_value="-",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="AGE",
+                    value="30",
+                    value_type=ConfigValueType.INT,
+                    default_value="30",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="HEIGHT_CM",
+                    value="170",
+                    value_type=ConfigValueType.INT,
+                    default_value="170",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="WEIGHT_KG",
+                    value="65.0",
+                    value_type=ConfigValueType.FLOAT,
+                    default_value="65.0",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="ACTIVITY_LEVEL",
+                    value="1.375",
+                    value_type=ConfigValueType.STR,
+                    default_value="1.375",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="DIET_GOAL",
+                    value="maintain",
+                    value_type=ConfigValueType.STR,
+                    default_value="maintain",
+                    version=1,
+                    description="Test",
+                ),
+            ]
+        )
+        session.commit()
+        session.close()
+
         notified: list[str] = []
         analyze_called = False
 
@@ -1573,11 +1726,39 @@ class TestInteractiveApi:
                 "url_private_download": "https://files.slack.test/F_LARGE.png",
             }
 
-        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str):
+        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str, provider: str = "openai"):
             nonlocal analyze_called
             analyze_called = True
-            return {}, "{}", "openai", "gpt-4o-mini"
+            result = CalorieAnalysisResult(
+                schema_version="calorie_v2",
+                items=[
+                    {
+                        "food_name": "テスト",
+                        "calorie": 100,
+                        "protein_g": 5.0,
+                        "fat_g": 3.0,
+                        "carbs_g": 10.0,
+                    }
+                ],
+                total_calorie=100,
+                total_protein_g=5.0,
+                total_fat_g=3.0,
+                total_carbs_g=10.0,
+            )
+            return (result, result.model_dump_json(), "openai", "gpt-4o-mini")
 
+        # v0.3.2: AdviceGeneratorをモック
+        class _FakeAdviceGenerator:
+            def __init__(self, character: str, provider: str):
+                pass
+
+            def generate(self, remaining: dict, consumed: dict, goal: dict) -> str:
+                return "テストアドバイス: 順調だっちゃ！"
+
+        monkeypatch.setattr(
+            "backend.api.interactive.AdviceGenerator",
+            _FakeAdviceGenerator,
+        )
         monkeypatch.setattr(
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
@@ -1637,6 +1818,69 @@ class TestInteractiveApi:
         Base.metadata.create_all(bind=engine)
         session_factory = sessionmaker(bind=engine)
 
+        # v0.3.2: 体組成設定を追加
+        session = session_factory()
+        session.add_all(
+            [
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="GENDER",
+                    value="male",
+                    value_type=ConfigValueType.STR,
+                    default_value="-",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="AGE",
+                    value="30",
+                    value_type=ConfigValueType.INT,
+                    default_value="30",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="HEIGHT_CM",
+                    value="170",
+                    value_type=ConfigValueType.INT,
+                    default_value="170",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="WEIGHT_KG",
+                    value="65.0",
+                    value_type=ConfigValueType.FLOAT,
+                    default_value="65.0",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="ACTIVITY_LEVEL",
+                    value="1.375",
+                    value_type=ConfigValueType.STR,
+                    default_value="1.375",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="DIET_GOAL",
+                    value="maintain",
+                    value_type=ConfigValueType.STR,
+                    default_value="maintain",
+                    version=1,
+                    description="Test",
+                ),
+            ]
+        )
+        session.commit()
+        session.close()
+
         notified: list[str] = []
 
         async def _fake_notify_calorie_result(channel_id, user_id, message, blocks=None):
@@ -1653,9 +1897,21 @@ class TestInteractiveApi:
         def _fake_download_slack_file_bytes(download_url: str, bot_token: str):
             return b"fake-image-bytes"
 
-        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str):
+        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str, provider: str = "openai"):
             raise interactive_api.CalorieImageParseError("failed to parse image")
 
+        # v0.3.2: AdviceGeneratorをモック
+        class _FakeAdviceGenerator:
+            def __init__(self, character: str, provider: str):
+                pass
+
+            def generate(self, remaining: dict, consumed: dict, goal: dict) -> str:
+                return "テストアドバイス: 順調だっちゃ！"
+
+        monkeypatch.setattr(
+            "backend.api.interactive.AdviceGenerator",
+            _FakeAdviceGenerator,
+        )
         monkeypatch.setattr(
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
@@ -1694,7 +1950,7 @@ class TestInteractiveApi:
         done = await _wait_until(lambda: len(notified) == 1, timeout=1.0)
         assert done is True
 
-        assert notified == ["画像解析に失敗しました"]
+        assert notified == ["エラーが発生しました: failed to parse image"]
         session = session_factory()
         assert session.query(CalorieRecord).count() == 0
         session.close()
@@ -1715,6 +1971,69 @@ class TestInteractiveApi:
         Base.metadata.create_all(bind=engine)
         session_factory = sessionmaker(bind=engine)
 
+        # v0.3.2: 体組成設定を追加
+        session = session_factory()
+        session.add_all(
+            [
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="GENDER",
+                    value="male",
+                    value_type=ConfigValueType.STR,
+                    default_value="-",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="AGE",
+                    value="30",
+                    value_type=ConfigValueType.INT,
+                    default_value="30",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="HEIGHT_CM",
+                    value="170",
+                    value_type=ConfigValueType.INT,
+                    default_value="170",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="WEIGHT_KG",
+                    value="65.0",
+                    value_type=ConfigValueType.FLOAT,
+                    default_value="65.0",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="ACTIVITY_LEVEL",
+                    value="1.375",
+                    value_type=ConfigValueType.STR,
+                    default_value="1.375",
+                    version=1,
+                    description="Test",
+                ),
+                Configuration(
+                    user_id="U03THHYBETW",
+                    key="DIET_GOAL",
+                    value="maintain",
+                    value_type=ConfigValueType.STR,
+                    default_value="maintain",
+                    version=1,
+                    description="Test",
+                ),
+            ]
+        )
+        session.commit()
+        session.close()
+
         notified: list[str] = []
 
         async def _fake_notify_calorie_result(channel_id, user_id, message, blocks=None):
@@ -1731,9 +2050,21 @@ class TestInteractiveApi:
         def _fake_download_slack_file_bytes(download_url: str, bot_token: str):
             return b"fake-image-bytes"
 
-        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str):
+        def _fake_analyze_calorie(image_bytes: bytes, mime_type: str, provider: str = "openai"):
             raise interactive_api.CalorieImageParseError("items was empty")
 
+        # v0.3.2: AdviceGeneratorをモック
+        class _FakeAdviceGenerator:
+            def __init__(self, character: str, provider: str):
+                pass
+
+            def generate(self, remaining: dict, consumed: dict, goal: dict) -> str:
+                return "テストアドバイス: 順調だっちゃ！"
+
+        monkeypatch.setattr(
+            "backend.api.interactive.AdviceGenerator",
+            _FakeAdviceGenerator,
+        )
         monkeypatch.setattr(
             "backend.api.interactive._notify_calorie_result",
             _fake_notify_calorie_result,
@@ -1772,7 +2103,7 @@ class TestInteractiveApi:
         done = await _wait_until(lambda: len(notified) == 1, timeout=1.0)
         assert done is True
 
-        assert notified == ["upload画像はカロリー算出不可です。"]
+        assert notified == ["エラーが発生しました: items was empty"]
         session = session_factory()
         assert session.query(CalorieRecord).count() == 0
         session.close()

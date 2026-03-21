@@ -218,7 +218,9 @@ __marimo__/
 *.sqlite3-wal
 *.db-shm
 *.sqlite-shm
+*.db.backup_*
 *.sqlite3-shm
 
 # custom
 backend/log
+*venv

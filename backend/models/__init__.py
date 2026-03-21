@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -313,6 +314,10 @@ class CalorieRecord(Base, UUIDMixin):
     provider: Mapped[str] = mapped_column(String(16), nullable=False)
     model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now())
+    # v0.3.2: PFCカラム追加
+    protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
         CheckConstraint("calorie >= 0", name="ck_calorie_records_calorie_non_negative"),

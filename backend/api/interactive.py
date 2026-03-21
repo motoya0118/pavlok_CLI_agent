@@ -16,8 +16,16 @@ import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from backend.advice_generator import AdviceGenerator
+from backend.api.command import _load_user_config_values
 from backend.api.report_ui import build_report_plan_input_context
-from backend.calorie_agent import CalorieAgentError, CalorieImageParseError, analyze_calorie
+from backend.calorie_agent import (
+    CalorieAgentError,
+    CalorieAnalysisResult,
+    CalorieImageParseError,
+    analyze_calorie,
+)
+from backend.calorie_tdee import calculate_remaining
 from backend.models import (
     ActionLog,
     ActionResult,
@@ -31,6 +39,7 @@ from backend.models import (
     Schedule,
     ScheduleState,
 )
+from backend.slack_ui import _build_calorie_with_remaining_blocks
 
 MAX_COMMITMENT_ROWS = 10
 MIN_COMMITMENT_ROWS = 3
@@ -178,32 +187,57 @@ def _download_slack_file_bytes(download_url: str, bot_token: str) -> bytes:
     return response.content
 
 
-def _normalize_calorie_items(payload: dict[str, Any]) -> list[dict[str, int | str]]:
-    """Normalize parsed calorie payload into DB-ready rows."""
-    items = payload.get("items", [])
-    if not isinstance(items, list) or not items:
-        raise CalorieImageParseError("items was empty")
+def _normalize_calorie_items(
+    payload: dict[str, Any] | CalorieAnalysisResult,
+) -> list[dict[str, Any]]:
+    """Normalize parsed calorie payload into DB-ready rows with PFC.
 
-    normalized: list[dict[str, int | str]] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
+    Args:
+        payload: Either dict (legacy) or CalorieAnalysisResult (v0.3.2+)
 
-        food_raw = item.get("food_name")
-        food_name = food_raw.strip() if isinstance(food_raw, str) else ""
-        if not food_name:
-            food_name = "不明"
+    Returns:
+        List of dict with food_name, calorie, protein_g, fat_g, carbs_g
+    """
+    # Handle Pydantic model (v0.3.2+)
+    if isinstance(payload, CalorieAnalysisResult):
+        items_list = payload.items
+    else:
+        # Legacy dict format
+        items = payload.get("items", [])
+        if not isinstance(items, list) or not items:
+            raise CalorieImageParseError("items was empty")
+        items_list = items
 
-        calorie_raw = item.get("calorie")
-        try:
-            calorie = int(calorie_raw)
-        except (TypeError, ValueError) as exc:
-            raise CalorieImageParseError("calorie value was invalid") from exc
+    normalized: list[dict[str, Any]] = []
+    for item in items_list:
+        if isinstance(item, dict):
+            # Legacy format
+            food_raw = item.get("food_name")
+            food_name = food_raw.strip() if isinstance(food_raw, str) else ""
+            if not food_name:
+                food_name = "不明"
 
-        if calorie < 0:
-            raise CalorieImageParseError("calorie must be non-negative")
+            calorie_raw = item.get("calorie")
+            try:
+                calorie = int(calorie_raw)
+            except (TypeError, ValueError) as exc:
+                raise CalorieImageParseError("calorie value was invalid") from exc
 
-        normalized.append({"food_name": food_name, "calorie": calorie})
+            if calorie < 0:
+                raise CalorieImageParseError("calorie must be non-negative")
+
+            normalized.append(
+                {
+                    "food_name": food_name,
+                    "calorie": calorie,
+                    "protein_g": item.get("protein_g", 0),
+                    "fat_g": item.get("fat_g", 0),
+                    "carbs_g": item.get("carbs_g", 0),
+                }
+            )
+        else:
+            # Pydantic FoodItem model (v0.3.2+)
+            normalized.append(item.model_dump())
 
     if not normalized:
         raise CalorieImageParseError("normalized items was empty")
@@ -1697,6 +1731,17 @@ async def _run_calorie_submit_job(
     """Run calorie submit processing in background after modal ACK."""
     stage = "fetch_file_info"
     try:
+        # v0.3.2追加: 体組成設定チェック
+        stage = "check_body_composition"
+        configs = _load_user_config_values(user_id)
+        required_keys = ["GENDER", "AGE", "HEIGHT_CM", "WEIGHT_KG", "ACTIVITY_LEVEL", "DIET_GOAL"]
+        missing = [k for k in required_keys if not configs.get(k) or configs[k] == "-"]
+
+        if missing:
+            raise CalorieAgentError(
+                f"先に`/config`で体組成設定を完了してください（不足: {', '.join(missing)}）"
+            )
+
         file_info = await asyncio.to_thread(_fetch_slack_file_info, file_id, bot_token)
         stage = "validate_file_size"
         file_size = int(file_info.get("size") or 0)
@@ -1727,10 +1772,13 @@ async def _run_calorie_submit_job(
 
         mime_type = str(file_info.get("mimetype") or "image/jpeg")
         stage = "analyze_calorie"
+        # v0.3.2: 環境変数からプロバイダーを取得
+        calorie_provider = os.getenv("CALORIE_PROVIDER", "openai").strip()
         parsed_payload, raw_json, provider, model = await asyncio.to_thread(
             analyze_calorie,
             image_bytes,
             mime_type,
+            calorie_provider,
         )
         stage = "normalize_items"
         items = _normalize_calorie_items(parsed_payload)
@@ -1746,6 +1794,9 @@ async def _run_calorie_submit_job(
                         uploaded_at=uploaded_at_jst,
                         food_name=str(row["food_name"]),
                         calorie=int(row["calorie"]),
+                        protein_g=float(row.get("protein_g", 0)),
+                        fat_g=float(row.get("fat_g", 0)),
+                        carbs_g=float(row.get("carbs_g", 0)),
                         llm_raw_response_json=raw_json,
                         provider=provider,
                         model=model,
@@ -1758,12 +1809,57 @@ async def _run_calorie_submit_job(
         finally:
             session.close()
 
+        # v0.3.2追加: 残り摂取許容値の計算
+        stage = "calculate_remaining"
+        calc_session = _get_session()
+        try:
+            remaining_data = calculate_remaining(  # noqa: F841 - used in Phase 6
+                user_id=user_id,
+                target_date=datetime.now(JST).date(),
+                configs=configs,
+                session=calc_session,
+            )
+        finally:
+            calc_session.close()
+
+        # v0.3.2追加: アドバイス生成
+        stage = "generate_advice"
+        character = configs.get("COACH_CHARACTOR", "うる星やつらのラムちゃん")
+        advice = AdviceGenerator(character, calorie_provider).generate(
+            remaining=remaining_data["remaining"],
+            consumed=remaining_data["consumed"],
+            goal=remaining_data["goal"],
+        )
+
         stage = "notify_success"
         await _notify_calorie_result(
             channel_id=channel_id,
             user_id=user_id,
             message="カロリー解析結果を記録しました",
-            blocks=_build_calorie_result_blocks(items, uploaded_at_jst),
+            blocks=_build_calorie_with_remaining_blocks(
+                items=items,
+                uploaded_at=uploaded_at_jst,
+                remaining_data=remaining_data,
+                advice=advice,
+            ),
+        )
+    except CalorieAgentError as exc:
+        # v0.3.2追加: 体組成設定エラーなどのユーザー対応可能なエラー
+        error_text = str(exc)
+        if "体組成設定" in error_text:
+            user_message = error_text  # 設定不足のメッセージをそのまま表示
+        else:
+            user_message = f"エラーが発生しました: {error_text}"
+        print(
+            f"[{datetime.now()}] process_calorie_submit agent error: "
+            f"stage={stage} user_id={user_id} channel_id={channel_id} "
+            f"file_id={file_id} error={type(exc).__name__}: {exc}"
+        )
+        print(traceback.format_exc())
+        await _notify_calorie_result(
+            channel_id=channel_id,
+            user_id=user_id,
+            message=user_message,
         )
     except CalorieImageParseError as exc:
         error_text = str(exc)
