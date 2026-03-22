@@ -20,7 +20,8 @@ CALORIE_PROVIDER=openai # openai or gemini
 OPENAI_API_KEY={YOUR_OPENAI_API_KEY}
 GEMINI_API_KEY={YOUR_GEMINI_API_KEY}
 CALORIE_OPENAI_MODEL=gpt-4o-mini
-CALORIE_GEMINI_MODEL=gemini-2.0-flash
+CALORIE_GEMINI_MODEL=gemini-3.1-flash-lite-preview
+ADVICE_MODEL=gpt-4o-mini # アドバイス生成用モデル（省略時はCALORIE_OPENAI_MODELを使用）
 
 # ===== Pavlok 罰設定 =====
 PAVLOK_TYPE_PUNISH=zap # 罰のPavlokモード（beep/vibe/zap など）
