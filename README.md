@@ -65,8 +65,8 @@ uv sync
    ![alt text](./documents/images/README/image4.png)
 6. .envの`PAVLOK_API_KEY`項に設定します
 
-### 3. ngorkの設定
-#### 3-1. ngorkのアカウントを作成する
+### 3. ngrokの設定
+#### 3-1. ngrokのアカウントを作成する
 [こちら](https://ngrok.com/?homepage-cta-docs=control)からアカウントを作成する
 
 #### 3-2. ngrokをインストールする
@@ -76,16 +76,16 @@ brew install ngrok/ngrok/ngrok
 
 #### 3-3. ngrokにauthトークンを設定する
 ```bash
-ngrok config {ngrokダッシュボードに書いてるauthトークン}
+ngrok config add-authtoken {ngrokダッシュボードに書いてるauthトークン}
 ```
 
-#### 3-4. 8000番ポートでngorkを起動する
+#### 3-4. 8000番ポートでngrokを起動する
 
 ```bash
 ngrok http 8000
 ```
 
-#### 3-5. ngorkから発行されたurlを確認する
+#### 3-5. ngrokから発行されたurlを確認する
 **※ 停止するとurlが変わるので試用中は停止しないように注意**
 ![alt text](./documents/images/README/image7.png)
 
@@ -111,31 +111,31 @@ features:
     always_online: false
   slash_commands:
     - command: /base_commit
-      url: {ngorkのurl}/slack/gateway
+      url: {ngrokのurl}/slack/gateway
       description: 1日1回絶対にやることをコミットメント
       should_escape: false
     - command: /stop
-      url: {ngorkのurl}/slack/gateway
+      url: {ngrokのurl}/slack/gateway
       description: 鬼コーチの監視を停止する
       should_escape: false
     - command: /restart
-      url: {ngorkのurl}/slack/gateway
+      url: {ngrokのurl}/slack/gateway
       description: 鬼コーチの監視を再開する
       should_escape: false
     - command: /config
-      url: {ngorkのurl}/slack/gateway
+      url: {ngrokのurl}/slack/gateway
       description: 鬼コーチの設定値を確認・更新する
       should_escape: false
     - command: /plan
-      url: {ngorkのurl}/slack/gateway
+      url: {ngrokのurl}/slack/gateway
       description: 24時間のplanを更新する
       should_escape: false
     - command: /help
-      url: {ngorkのurl}/slack/gateway
+      url: {ngrokのurl}/slack/gateway
       description: 鬼コーチの概要・コマンド説明・注意点
       should_escape: false
     - command: /cal
-      url: {ngorkのurl}/slack/gateway
+      url: {ngrokのurl}/slack/gateway
       description: 食事写真からカロリー計算
       should_escape: false
 oauth_config:
@@ -152,7 +152,7 @@ oauth_config:
 settings:
   interactivity:
     is_enabled: true
-    request_url: {ngorkのurl}/slack/gateway
+    request_url: {ngrokのurl}/slack/gateway
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false
